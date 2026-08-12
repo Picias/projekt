@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  /* Granatowa paleta z makiety */
+  --color-navy-950: #061027;
+  --color-navy-900: #0b1b3d;
+  --color-navy-800: #12274f;
+  --color-navy-700: #1b3565;
+  --color-navy-600: #27457e;
+  --color-navy-500: #3c5c99;
+
+  /* Zielony akcent (logo, aktywna nawigacja, statusy) */
+  --color-sejm-green: #17a24a;
+  --color-sejm-green-light: #2fc46a;
+
+  /* Jasne powierzchnie kart */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-navy-950);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+  }
+}
