@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Posel } from "@/lib/posel";
 
 async function fetchWatchedPoslowie(userId: string): Promise<Posel[]> {
-  const { data: joined, error: joinError } = await supabase
+  const { data: joined, error: joinError } = await supabaseAdmin
     .from("obserwowani")
     .select("posel_id, poslowie(id, imie_nazwisko, partia, zdjecie_url)")
     .eq("user_id", userId);
@@ -19,7 +19,7 @@ async function fetchWatchedPoslowie(userId: string): Promise<Posel[]> {
     }
   }
 
-  const { data: watched, error: watchedError } = await supabase
+  const { data: watched, error: watchedError } = await supabaseAdmin
     .from("obserwowani")
     .select("posel_id")
     .eq("user_id", userId);
@@ -34,7 +34,7 @@ async function fetchWatchedPoslowie(userId: string): Promise<Posel[]> {
     return [];
   }
 
-  const { data: poslowie, error: poslowieError } = await supabase
+  const { data: poslowie, error: poslowieError } = await supabaseAdmin
     .from("poslowie")
     .select("id, imie_nazwisko, partia, zdjecie_url")
     .in("id", poselIds);
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("obserwowani")
       .select("user_id")
       .eq("user_id", userId)
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: existing, error: readError } = await supabase
+    const { data: existing, error: readError } = await supabaseAdmin
       .from("obserwowani")
       .select("user_id")
       .eq("user_id", userId)
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
     }
 
     if (existing) {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await supabaseAdmin
         .from("obserwowani")
         .delete()
         .eq("user_id", userId)
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ watching: false });
     }
 
-    const { error: insertError } = await supabase
+    const { error: insertError } = await supabaseAdmin
       .from("obserwowani")
       .insert({ user_id: userId, posel_id: poselId });
 

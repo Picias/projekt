@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { AttendanceComparison } from "@/lib/sejm-attendance";
 import {
   createEmptyMpProfileStats,
@@ -117,18 +117,18 @@ export async function fetchAttendanceComparisonFromDb(
   clubName: string | null,
 ): Promise<AttendanceComparison> {
   const [{ data: mpRow }, { data: sejmRow }, clubResponse] = await Promise.all([
-    supabase
+    supabaseAdmin
       .from("posel_frekwencja")
       .select("frekwencja_procent")
       .eq("posel_id", mpId)
       .maybeSingle(),
-    supabase
+    supabaseAdmin
       .from("frekwencja_agregaty")
       .select("frekwencja_procent")
       .eq("klucz", "sejm")
       .maybeSingle(),
     clubName
-      ? supabase
+      ? supabaseAdmin
           .from("frekwencja_agregaty")
           .select("frekwencja_procent")
           .eq("klucz", clubName)
@@ -168,20 +168,20 @@ export async function fetchMpProfileBundleFromDb(
     interpelacjeCountResponse,
     comparison,
   ] = await Promise.all([
-    supabase.from("posel_frekwencja").select("*").eq("posel_id", mpId).maybeSingle(),
-    supabase
+    supabaseAdmin.from("posel_frekwencja").select("*").eq("posel_id", mpId).maybeSingle(),
+    supabaseAdmin
       .from("posel_glosowania")
       .select("*")
       .eq("posel_id", mpId)
       .order("data", { ascending: false })
       .limit(RECENT_VOTES_LIMIT),
-    supabase
+    supabaseAdmin
       .from("interpelacje")
       .select("*")
       .eq("posel_id", mpId)
       .order("data", { ascending: false })
       .limit(INTERPELLATIONS_LIMIT),
-    supabase
+    supabaseAdmin
       .from("interpelacje")
       .select("id", { count: "exact", head: true })
       .eq("posel_id", mpId),

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fetchVotingDeepDive } from "@/lib/sejm-voting";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -22,7 +22,7 @@ export async function GET(request: Request, context: RouteContext) {
     );
   }
 
-  const { data } = await supabase
+  const { data } = await supabaseAdmin
     .from("poslowie")
     .select("partia")
     .eq("id", mpId)

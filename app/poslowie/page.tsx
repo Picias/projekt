@@ -1,17 +1,29 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { ChevronLeft, ChevronRight, Users } from "lucide-react";
-import MpAvatar from "@/components/mp-avatar";
-import { supabase } from "@/lib/supabase";
-import { groupPoslowieByPartia, type Posel } from "@/lib/posel";
+import { ChevronLeft, Users } from "lucide-react";
+import PoslowieBrowser from "@/components/poslowie-browser";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { sortPoslowieByNazwisko, toPoselProfil } from "@/lib/posel";
+
+// Lista zmienia się po synchronizacji /api/sync-mps, więc czytamy ją na żądanie.
+export const dynamic = "force-dynamic";
 
 async function PoslowieList() {
-  const { data } = await supabase
-    .from("poslowie")
-    .select("*")
-    .order("imie_nazwisko");
+  const { data, error } = await supabaseAdmin.from("poslowie").select("*");
 
-  const poslowie = (data ?? []) as Posel[];
+  // Bez tego rozróżnienia błąd zapytania wygląda tak samo jak pusta baza.
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-sm text-red-200">
+        <p className="font-semibold text-red-100">Nie udało się pobrać listy posłów</p>
+        <p className="mt-2">{error.message}</p>
+      </div>
+    );
+  }
+
+  // Sortujemy w aplikacji, bo klucz to nazwisko z osobnej kolumny, a nie
+  // imie_nazwisko, po którym potrafi sortować Postgres.
+  const poslowie = sortPoslowieByNazwisko((data ?? []).map(toPoselProfil));
 
   if (poslowie.length === 0) {
     return (
@@ -28,48 +40,16 @@ async function PoslowieList() {
     );
   }
 
-  const grouped = groupPoslowieByPartia(poslowie);
-
-  return (
-    <div className="flex flex-col gap-5">
-      {grouped.map(([partia, czlonkowie]) => (
-        <section key={partia}>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-sejm-green-light">
-              {partia}
-            </h2>
-            <span className="text-xs text-white/45">{czlonkowie.length}</span>
-          </div>
-
-          <ul className="flex flex-col gap-2">
-            {czlonkowie.map((posel) => (
-              <li key={posel.id}>
-                <Link
-                  href={`/poslowie/${posel.id}`}
-                  className="flex items-center gap-3 rounded-2xl bg-white p-3 text-navy-900 shadow-md transition-shadow hover:shadow-lg"
-                >
-                  <MpAvatar
-                    name={posel.imie_nazwisko}
-                    photoUrl={posel.zdjecie_url}
-                    size="sm"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                    {posel.imie_nazwisko}
-                  </span>
-                  <ChevronRight size={16} className="shrink-0 text-slate-400" aria-hidden />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
-  );
+  return <PoslowieBrowser poslowie={poslowie} />;
 }
 
 function PoslowieListSkeleton() {
   return (
     <div className="flex flex-col gap-5" aria-busy="true" aria-label="Ładowanie listy posłów">
+      <div className="flex gap-2">
+        <div className="h-12 flex-1 animate-pulse rounded-2xl bg-white/10" />
+        <div className="size-12 animate-pulse rounded-2xl bg-white/10" />
+      </div>
       {[1, 2].map((section) => (
         <div key={section} className="space-y-2">
           <div className="h-4 w-24 animate-pulse rounded bg-white/10" />

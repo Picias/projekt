@@ -6,8 +6,8 @@ import {
   Ellipsis,
   House,
   Presentation,
+  ScrollText,
   Users,
-  Vote,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,9 +19,9 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Start", icon: House },
+  { href: "/ustawy", label: "Ustawy", icon: ScrollText },
   { href: "/poslowie", label: "Posłowie", icon: Users },
   { href: "/obrady", label: "Obrady", icon: Presentation },
-  { href: "/glosowania", label: "Głosowania", icon: Vote },
   { href: "/wiecej", label: "Więcej", icon: Ellipsis },
 ];
 

@@ -28,6 +28,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# sekrety trzymane poza .env (hasło do bazy Supabase)
+Supabase_pass.txt
+
 # vercel
 .vercel
 

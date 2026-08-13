@@ -4,6 +4,8 @@ type MpAvatarProps = {
   name: string;
   photoUrl?: string | null;
   size?: "sm" | "md";
+  // Pozwala podmienić domyślną zieloną obwódkę na kolor klubu posła.
+  frameClassName?: string;
 };
 
 const sizeClasses = {
@@ -11,12 +13,17 @@ const sizeClasses = {
   md: "size-12 text-sm",
 } as const;
 
-export default function MpAvatar({ name, photoUrl, size = "md" }: MpAvatarProps) {
+export default function MpAvatar({
+  name,
+  photoUrl,
+  size = "md",
+  frameClassName = "ring-2 ring-sejm-green/30",
+}: MpAvatarProps) {
   const sizeClass = sizeClasses[size];
 
   return (
     <span
-      className={`relative shrink-0 overflow-hidden rounded-full bg-navy-800 ring-2 ring-sejm-green/30 ${sizeClass}`}
+      className={`relative shrink-0 overflow-hidden rounded-full bg-navy-800 ${frameClassName} ${sizeClass}`}
     >
       {photoUrl ? (
         <img

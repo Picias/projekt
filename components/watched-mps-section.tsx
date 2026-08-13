@@ -101,7 +101,7 @@ export default function WatchedMpsSection() {
   }, []);
 
   return (
-    <section className="px-5">
+    <section>
       <div className="flex items-baseline justify-between">
         <div className="flex items-center gap-2">
           <Users size={18} className="text-sejm-green-light" aria-hidden />

@@ -13,7 +13,7 @@ import {
   SEJM_RECENT_VOTES_LIMIT,
   SEJM_TERM,
 } from "@/lib/sejm-api";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { VotingDetails } from "@/lib/sejm-voting";
 
 const SYNC_CONCURRENCY = 3;
@@ -175,7 +175,7 @@ async function syncMpFrekwencja(mpId: number): Promise<boolean> {
 
   const attendance = calculateAttendance(stats);
 
-  const { error } = await supabase.from("posel_frekwencja").upsert(
+  const { error } = await supabaseAdmin.from("posel_frekwencja").upsert(
     {
       posel_id: mpId,
       frekwencja_procent: attendance.percent,
@@ -195,7 +195,7 @@ async function syncMpGlosowania(
 ): Promise<number> {
   const recentVotes = await fetchRecentVotes(mpId, SEJM_RECENT_VOTES_LIMIT);
 
-  await supabase.from("posel_glosowania").delete().eq("posel_id", mpId);
+  await supabaseAdmin.from("posel_glosowania").delete().eq("posel_id", mpId);
 
   if (recentVotes.length === 0) {
     return 0;
@@ -251,7 +251,7 @@ async function syncMpGlosowania(
     };
   });
 
-  const { error } = await supabase.from("posel_glosowania").insert(rows);
+  const { error } = await supabaseAdmin.from("posel_glosowania").insert(rows);
 
   if (error) {
     return 0;
@@ -264,7 +264,7 @@ async function syncMpInterpelacje(mpId: number): Promise<number> {
   const items = await fetchInterpellationsForMp(mpId);
 
   if (items.length === 0) {
-    await supabase.from("interpelacje").delete().eq("posel_id", mpId);
+    await supabaseAdmin.from("interpelacje").delete().eq("posel_id", mpId);
     return 0;
   }
 
@@ -277,11 +277,11 @@ async function syncMpInterpelacje(mpId: number): Promise<number> {
     odbiorca: item.to?.join(", ") ?? null,
   }));
 
-  await supabase.from("interpelacje").delete().eq("posel_id", mpId);
+  await supabaseAdmin.from("interpelacje").delete().eq("posel_id", mpId);
 
   for (let offset = 0; offset < rows.length; offset += SEJM_DEFAULT_LIST_LIMIT) {
     const chunk = rows.slice(offset, offset + SEJM_DEFAULT_LIST_LIMIT);
-    const { error } = await supabase.from("interpelacje").insert(chunk);
+    const { error } = await supabaseAdmin.from("interpelacje").insert(chunk);
 
     if (error) {
       return offset;
@@ -329,7 +329,7 @@ export async function syncMpDetails(
 }
 
 export async function recomputeFrekwencjaAggregates(): Promise<boolean> {
-  const { data: frekwencje, error } = await supabase
+  const { data: frekwencje, error } = await supabaseAdmin
     .from("posel_frekwencja")
     .select("posel_id, frekwencja_procent");
 
@@ -337,7 +337,7 @@ export async function recomputeFrekwencjaAggregates(): Promise<boolean> {
     return false;
   }
 
-  const { data: poslowie } = await supabase.from("poslowie").select("id, partia");
+  const { data: poslowie } = await supabaseAdmin.from("poslowie").select("id, partia");
 
   const partiaById = new Map(
     (poslowie ?? []).map((posel) => [posel.id as number, posel.partia as string | null]),
@@ -387,7 +387,7 @@ export async function recomputeFrekwencjaAggregates(): Promise<boolean> {
     })),
   ];
 
-  const { error: upsertError } = await supabase
+  const { error: upsertError } = await supabaseAdmin
     .from("frekwencja_agregaty")
     .upsert(aggregateRows, { onConflict: "klucz" });
 
@@ -406,7 +406,7 @@ export async function syncMpDetailsBatch(options: {
   let mpRows: { id: number; partia: string | null }[] = [];
 
   if (options.poselId) {
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
       .from("poslowie")
       .select("id, partia")
       .eq("id", options.poselId)
@@ -424,7 +424,7 @@ export async function syncMpDetailsBatch(options: {
 
     mpRows = [data as { id: number; partia: string | null }];
   } else {
-    const { data } = await supabase
+    const { data } = await supabaseAdmin
       .from("poslowie")
       .select("id, partia")
       .order("id")
@@ -467,7 +467,7 @@ async function fetchAllPoslowieFromDb(): Promise<{ id: number; partia: string | 
   let offset = 0;
 
   while (true) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("poslowie")
       .select("id, partia")
       .order("id")

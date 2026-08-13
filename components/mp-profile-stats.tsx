@@ -1,6 +1,7 @@
 import { fetchMpProfileBundleFromDb } from "@/lib/mp-db";
 import { createEmptyMpProfileStats } from "@/lib/mp-stats";
 import MpProfileInteractive from "@/components/mp-profile-interactive";
+import type { ClubTheme } from "@/lib/club-colors";
 
 export function MpProfileStatsSkeleton() {
   return (
@@ -31,9 +32,14 @@ export function MpProfileStatsSkeleton() {
 type MpProfileStatsProps = {
   poselId: number;
   clubName: string | null;
+  clubTheme: ClubTheme;
 };
 
-export async function MpProfileStats({ poselId, clubName }: MpProfileStatsProps) {
+export async function MpProfileStats({
+  poselId,
+  clubName,
+  clubTheme,
+}: MpProfileStatsProps) {
   try {
     const bundle = await fetchMpProfileBundleFromDb(poselId, clubName);
 
@@ -45,6 +51,7 @@ export async function MpProfileStats({ poselId, clubName }: MpProfileStatsProps)
         interpellations={bundle.interpellations}
         interpellationsTotal={bundle.interpellationsTotal}
         voteDetails={bundle.voteDetails}
+        clubTheme={clubTheme}
       />
     );
   } catch {
@@ -67,6 +74,7 @@ export async function MpProfileStats({ poselId, clubName }: MpProfileStatsProps)
         interpellations={[]}
         interpellationsTotal={0}
         voteDetails={{}}
+        clubTheme={clubTheme}
       />
     );
   }

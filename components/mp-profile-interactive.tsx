@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import VotePill from "@/components/vote-pill";
+import type { ClubTheme } from "@/lib/club-colors";
 import type { AttendanceComparison } from "@/lib/sejm-attendance";
 import {
   formatInterpellationCount,
@@ -30,6 +31,8 @@ type MpProfileInteractiveProps = {
   interpellations: InterpellationItem[];
   interpellationsTotal: number;
   voteDetails: Record<string, VotingDeepDive>;
+  // Kolory klubu posła — nagłówki i ikony profilu zamiast stałej zieleni.
+  clubTheme: ClubTheme;
 };
 
 type Panel = "attendance" | "interpellations" | null;
@@ -49,6 +52,7 @@ function StatCardButton({
   hint,
   active,
   onClick,
+  theme,
 }: {
   icon: typeof BarChart3;
   label: string;
@@ -56,18 +60,19 @@ function StatCardButton({
   hint?: string;
   active?: boolean;
   onClick: () => void;
+  theme: ClubTheme;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-expanded={active}
-      className={`rounded-2xl bg-white/5 p-4 text-left ring-1 transition-all hover:bg-white/8 ${
-        active ? "ring-sejm-green/50" : "ring-white/10"
+      className={`rounded-2xl border p-4 text-left transition-all hover:bg-white/8 ${
+        active ? `${theme.border} ${theme.bg}` : "border-white/10 bg-white/5"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sejm-green-light">
+        <div className={`flex items-center gap-2 ${theme.text}`}>
           <Icon size={16} aria-hidden />
           <p className="text-xs font-semibold uppercase tracking-wide">{label}</p>
         </div>
@@ -88,24 +93,28 @@ function ComparisonBar({
   value,
   display,
   highlight,
+  theme,
 }: {
   label: string;
   value: number;
   display: string;
   highlight?: boolean;
+  theme: ClubTheme;
 }) {
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
-        <span className={highlight ? "font-semibold text-sejm-green-light" : "text-white/70"}>
+        <span className={highlight ? `font-semibold ${theme.text}` : "text-white/70"}>
           {label}
         </span>
         <span className="font-semibold tabular-nums">{display}</span>
       </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-white/10">
+      {/* Kolor słupka posła bierzemy z klasy tekstu klubu przez bg-current,
+          bo mapa kolorów nie definiuje wariantu tła w pełnym kryciu. */}
+      <div className={`h-2.5 overflow-hidden rounded-full bg-white/10 ${theme.text}`}>
         <div
           className={`h-full rounded-full transition-all ${
-            highlight ? "bg-sejm-green" : "bg-white/35"
+            highlight ? "bg-current" : "bg-white/35"
           }`}
           style={{ width: `${Math.min(value, 100)}%` }}
         />
@@ -117,9 +126,11 @@ function ComparisonBar({
 function AttendancePanel({
   poselId,
   data,
+  theme,
 }: {
   poselId: number;
   data: AttendanceComparison;
+  theme: ClubTheme;
 }) {
   return (
     <div className="flex flex-col gap-4 pt-2">
@@ -133,18 +144,21 @@ function AttendancePanel({
         value={data.mp ?? 0}
         display={data.mp !== null ? `${data.mp}%` : "—"}
         highlight
+        theme={theme}
       />
       {data.clubName ? (
         <ComparisonBar
           label={`Klub ${data.clubName}`}
           value={data.club ?? 0}
           display={data.club !== null ? `${data.club}%` : "—"}
+          theme={theme}
         />
       ) : null}
       <ComparisonBar
         label="Średnia Sejmu"
         value={data.sejm ?? 0}
         display={data.sejm !== null ? `${data.sejm}%` : "—"}
+        theme={theme}
       />
     </div>
   );
@@ -342,6 +356,7 @@ export default function MpProfileInteractive({
   interpellations,
   interpellationsTotal,
   voteDetails,
+  clubTheme,
 }: MpProfileInteractiveProps) {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [selectedVote, setSelectedVote] = useState<MpVote | null>(null);
@@ -364,13 +379,16 @@ export default function MpProfileInteractive({
         {stats.fallbackMessage ? <FallbackNotice message={stats.fallbackMessage} /> : null}
 
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/70">
+          <h2
+            className={`mb-3 text-sm font-semibold uppercase tracking-wide ${clubTheme.text}`}
+          >
             Statystyki
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <StatCardButton
               icon={BarChart3}
               label="Frekwencja"
+              theme={clubTheme}
               value={
                 stats.attendancePercent !== null ? `${stats.attendancePercent}%` : "—"
               }
@@ -385,6 +403,7 @@ export default function MpProfileInteractive({
             <StatCardButton
               icon={FileText}
               label="Interpelacje"
+              theme={clubTheme}
               value={formatInterpellationCount(
                 stats.interpellationCount,
                 stats.interpellationApproximate,
@@ -396,20 +415,24 @@ export default function MpProfileInteractive({
           </div>
 
           {activePanel === "attendance" ? (
-            <article className="mt-3 rounded-2xl bg-white/5 p-4 ring-1 ring-sejm-green/25">
-              <div className="mb-2 flex items-center gap-2 text-sejm-green-light">
+            <article
+              className={`mt-3 rounded-2xl border bg-white/5 p-4 ${clubTheme.border}`}
+            >
+              <div className={`mb-2 flex items-center gap-2 ${clubTheme.text}`}>
                 <Users size={14} aria-hidden />
                 <p className="text-xs font-semibold uppercase tracking-wide">
                   Porównanie frekwencji
                 </p>
               </div>
-              <AttendancePanel poselId={poselId} data={comparison} />
+              <AttendancePanel poselId={poselId} data={comparison} theme={clubTheme} />
             </article>
           ) : null}
 
           {activePanel === "interpellations" ? (
-            <article className="mt-3 rounded-2xl bg-white/5 p-4 ring-1 ring-sejm-green/25">
-              <div className="mb-2 flex items-center gap-2 text-sejm-green-light">
+            <article
+              className={`mt-3 rounded-2xl border bg-white/5 p-4 ${clubTheme.border}`}
+            >
+              <div className={`mb-2 flex items-center gap-2 ${clubTheme.text}`}>
                 <FileText size={14} aria-hidden />
                 <p className="text-xs font-semibold uppercase tracking-wide">
                   Interpelacje posła
@@ -421,9 +444,9 @@ export default function MpProfileInteractive({
         </section>
 
         <section>
-          <div className="mb-3 flex items-center gap-2">
-            <Vote size={16} className="text-sejm-green-light" aria-hidden />
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">
+          <div className={`mb-3 flex items-center gap-2 ${clubTheme.text}`}>
+            <Vote size={16} aria-hidden />
+            <h2 className="text-sm font-semibold uppercase tracking-wide">
               Ostatnie głosowania
             </h2>
           </div>
@@ -439,7 +462,7 @@ export default function MpProfileInteractive({
                   <button
                     type="button"
                     onClick={() => setSelectedVote(vote)}
-                    className="w-full rounded-2xl bg-white/5 p-4 text-left ring-1 ring-white/10 transition-colors hover:bg-white/8 hover:ring-sejm-green/30"
+                    className={`w-full rounded-2xl border bg-white/5 p-4 text-left transition-colors hover:bg-white/8 ${clubTheme.border}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
