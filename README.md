@@ -48,7 +48,6 @@ app/
   poslowie/
 components/
   bottom-nav.tsx        # stały dolny pasek nawigacji
-  sejm-on-logo.tsx      # logotyp SEJM ON
   placeholder-screen.tsx
 ```
 

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import {
@@ -9,13 +10,18 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import HomeWatchedUstawy from "@/components/home-watched-ustawy";
-import SejmOnLogo from "@/components/sejm-on-logo";
 import WatchedMpsSection from "@/components/watched-mps-section";
 import {
-  fetchNextProceeding,
-  formatProceedingDate,
-  getProceedingCountdownLabel,
-} from "@/lib/sejm";
+  fetchNextPosiedzenie,
+  formatPosiedzenieRange,
+  getCountdownLabel,
+  getPosiedzenieName,
+  todayIso,
+} from "@/lib/posiedzenia";
+
+// Badge "za X dni" liczy się względem dzisiejszej daty, więc strona
+// musi być renderowana na żądanie, a nie zapiekana w czasie builda.
+export const dynamic = "force-dynamic";
 
 type QuickLink = {
   href: string;
@@ -31,26 +37,31 @@ const QUICK_LINKS: QuickLink[] = [
 ];
 
 async function NextSessionHero() {
-  const proceeding = await fetchNextProceeding();
+  const posiedzenie = await fetchNextPosiedzenie();
 
-  if (!proceeding) {
+  if (!posiedzenie) {
     return (
       <article className="rounded-3xl border border-white/10 bg-navy-800/60 p-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
           Najbliższe posiedzenie Sejmu
         </p>
         <p className="mt-3 text-sm leading-relaxed text-white/60">
-          Nie udało się pobrać terminu najbliższego posiedzenia z API Sejmu.
+          Brak zaplanowanych posiedzeń w bazie. Uruchom synchronizację pod adresem{" "}
+          <Link href="/api/sync-sessions" className="text-sejm-green-light hover:underline">
+            /api/sync-sessions
+          </Link>
+          .
         </p>
       </article>
     );
   }
 
-  const countdown = getProceedingCountdownLabel(proceeding);
-  const dateLabel =
-    proceeding.startDate === proceeding.endDate
-      ? formatProceedingDate(proceeding.startDate)
-      : `${formatProceedingDate(proceeding.startDate)} – ${formatProceedingDate(proceeding.endDate)}`;
+  const today = todayIso();
+  const countdown = getCountdownLabel(posiedzenie, today);
+  const dateLabel = formatPosiedzenieRange(
+    posiedzenie.data_rozpoczecia,
+    posiedzenie.data_zakonczenia,
+  );
 
   return (
     <Link
@@ -73,7 +84,7 @@ async function NextSessionHero() {
       </div>
 
       <h2 className="relative mt-4 text-2xl font-bold leading-tight">
-        {proceeding.number}. posiedzenie Sejmu
+        {getPosiedzenieName(posiedzenie)}
       </h2>
 
       <p className="relative mt-2 flex items-center gap-2 text-sm font-medium text-white/75">
@@ -82,7 +93,7 @@ async function NextSessionHero() {
       </p>
 
       <p className="relative mt-3 line-clamp-2 text-xs leading-relaxed text-white/45">
-        {proceeding.title}
+        {posiedzenie.tytul}
       </p>
 
       <span className="relative mt-4 inline-flex items-center gap-1 text-xs font-semibold text-sejm-green-light">
@@ -121,7 +132,19 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <SejmOnLogo />
+        <div className="flex flex-col items-center text-center">
+          <Image
+            src="/logo.png"
+            alt="SejmON"
+            width={192}
+            height={128}
+            preload
+            className="h-auto w-48 object-contain"
+          />
+          <p className="mt-4 text-sm font-medium text-white/70">
+            Włącz się w decyzje
+          </p>
+        </div>
       </header>
 
       <Suspense fallback={<NextSessionHeroSkeleton />}>

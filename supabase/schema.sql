@@ -115,6 +115,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS ustawy_numer_druku_key ON ustawy (numer_druku)
 CREATE INDEX IF NOT EXISTS idx_ustawy_data_wplywu
   ON ustawy (data_wplywu DESC);
 
+-- Posiedzenia Sejmu (moduł "Kalendarz obrad") wypełniane przez /api/sync-sessions.
+--
+-- Kluczem jest data rozpoczęcia, a nie numer posiedzenia z API. API Sejmu nadaje
+-- number = 0 wszystkim terminom jeszcze nierozpoczętym oraz Zgromadzeniom
+-- Narodowym (w kadencji X jest ich 11), więc upsert po numerze scaliłby wszystkie
+-- przyszłe posiedzenia w jeden wiersz. Daty rozpoczęcia są w obrębie kadencji
+-- unikalne, a gdy planowany termin dostanie swój numer, wiersz zaktualizuje się
+-- w miejscu.
+CREATE TABLE IF NOT EXISTS posiedzenia (
+  id TEXT PRIMARY KEY,
+  numer INTEGER NOT NULL DEFAULT 0,
+  tytul TEXT NOT NULL,
+  data_rozpoczecia DATE NOT NULL,
+  data_zakonczenia DATE NOT NULL,
+  zaktualizowano_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Pokrywa zapytanie o najbliższe posiedzenie na stronie głównej:
+-- filtr data_zakonczenia >= dziś posortowany po data_rozpoczecia.
+CREATE INDEX IF NOT EXISTS idx_posiedzenia_daty
+  ON posiedzenia (data_zakonczenia, data_rozpoczecia);
+
 -- Ustawy obserwowane przez użytkownika (user_id jak w tabeli obserwowani)
 CREATE TABLE IF NOT EXISTS obserwowane_ustawy (
   user_id TEXT NOT NULL,
@@ -133,6 +155,7 @@ ALTER TABLE posel_glosowania ENABLE ROW LEVEL SECURITY;
 ALTER TABLE interpelacje ENABLE ROW LEVEL SECURITY;
 ALTER TABLE frekwencja_agregaty ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ustawy ENABLE ROW LEVEL SECURITY;
+ALTER TABLE posiedzenia ENABLE ROW LEVEL SECURITY;
 ALTER TABLE obserwowane_ustawy ENABLE ROW LEVEL SECURITY;
 
 -- Polityki idempotentne — plik można uruchamiać wielokrotnie
@@ -155,6 +178,10 @@ CREATE POLICY "frekwencja_agregaty_select_anon"
 DROP POLICY IF EXISTS "ustawy_select_anon" ON ustawy;
 CREATE POLICY "ustawy_select_anon"
   ON ustawy FOR SELECT TO anon USING (true);
+
+DROP POLICY IF EXISTS "posiedzenia_select_anon" ON posiedzenia;
+CREATE POLICY "posiedzenia_select_anon"
+  ON posiedzenia FOR SELECT TO anon USING (true);
 
 -- Wcześniejsze wersje schematu dawały anon prawo zapisu, bo synchronizacja
 -- działała na kluczu publicznym. Teraz te polityki są zbędne.
