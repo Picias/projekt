@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS ustawy (
   autor TEXT,
   data_wplywu DATE,
   etap_legislacyjny TEXT NOT NULL DEFAULT 'projekt',
+  -- Bezpośredni odnośnik do skanu druku (załącznik PDF z API Sejmu)
+  pdf_url TEXT,
+  -- Tematyka druku. Pusta do czasu podłączenia modelu, który będzie ją nadawał
+  -- na podstawie treści — filtry na liście ustaw czytają już z tej kolumny.
+  tagi TEXT[] NOT NULL DEFAULT '{}',
   -- Kolumny wypełniane przez warstwę tłumaczącą prawo na ludzki język
   opis_ludzki TEXT,
   kogo_dotyczy TEXT,
@@ -89,6 +94,8 @@ CREATE TABLE IF NOT EXISTS ustawy (
 ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS autor TEXT;
 ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS data_wplywu DATE;
 ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS etap_legislacyjny TEXT NOT NULL DEFAULT 'projekt';
+ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS pdf_url TEXT;
+ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS tagi TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS opis_ludzki TEXT;
 ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS kogo_dotyczy TEXT;
 ALTER TABLE ustawy ADD COLUMN IF NOT EXISTS co_zmienia TEXT;
@@ -114,6 +121,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS ustawy_numer_druku_key ON ustawy (numer_druku)
 
 CREATE INDEX IF NOT EXISTS idx_ustawy_data_wplywu
   ON ustawy (data_wplywu DESC);
+
+-- Filtry listy ustaw: etap i wnioskodawca zawężają zbiór przed sortowaniem,
+-- a tagi sprawdzamy operatorem zawierania (@>), który potrzebuje indeksu GIN.
+CREATE INDEX IF NOT EXISTS idx_ustawy_etap
+  ON ustawy (etap_legislacyjny);
+
+CREATE INDEX IF NOT EXISTS idx_ustawy_autor
+  ON ustawy (autor);
+
+CREATE INDEX IF NOT EXISTS idx_ustawy_tagi
+  ON ustawy USING GIN (tagi);
 
 -- Posiedzenia Sejmu (moduł "Kalendarz obrad") wypełniane przez /api/sync-sessions.
 --

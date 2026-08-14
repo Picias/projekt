@@ -6,11 +6,16 @@ export const maxDuration = 120;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const limitParam = Number(searchParams.get("limit") ?? 10);
+  const rawLimit = searchParams.get("limit");
   const refreshSummaries = searchParams.get("refresh_summaries") === "true";
 
+  // Bez parametru pobieramy całą kadencję. limit służy już tylko do szybkiego
+  // sprawdzenia synchronizacji na kilku najnowszych drukach.
+  const parsedLimit = Number(rawLimit);
   const limit =
-    Number.isInteger(limitParam) && limitParam > 0 && limitParam <= 50 ? limitParam : 10;
+    rawLimit !== null && Number.isInteger(parsedLimit) && parsedLimit > 0
+      ? parsedLimit
+      : undefined;
 
   try {
     const result = await syncUstawy({ limit, refreshSummaries });

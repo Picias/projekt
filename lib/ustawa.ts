@@ -5,20 +5,29 @@ export type Ustawa = {
   autor: string | null;
   data_wplywu: string | null;
   etap_legislacyjny: string;
+  pdf_url: string | null;
+  tagi: string[] | null;
   opis_ludzki: string | null;
   kogo_dotyczy: string | null;
   co_zmienia: string | null;
   koszty_i_finansowanie: string | null;
 };
 
-export type StageKey = "projekt" | "komisje" | "sejm" | "senat" | "prezydent";
+export type StageKey =
+  | "projekt"
+  | "komisje"
+  | "sejm"
+  | "senat"
+  | "prezydent"
+  | "opublikowana";
 
 export const LEGISLATIVE_STAGES: { key: StageKey; label: string; hint: string }[] = [
   { key: "projekt", label: "Projekt", hint: "Wpłynął do Sejmu" },
   { key: "komisje", label: "Komisje", hint: "Prace w komisjach" },
   { key: "sejm", label: "Sejm", hint: "Czytania i głosowanie" },
   { key: "senat", label: "Senat", hint: "Stanowisko Senatu" },
-  { key: "prezydent", label: "Prezydent", hint: "Podpis i publikacja" },
+  { key: "prezydent", label: "Prezydent", hint: "Czeka na podpis" },
+  { key: "opublikowana", label: "Dz.U.", hint: "Ogłoszona w Dzienniku Ustaw" },
 ];
 
 const STAGE_KEYS = LEGISLATIVE_STAGES.map((stage) => stage.key);
@@ -38,7 +47,11 @@ export function resolveStageKey(etap: string | null | undefined): StageKey {
     return value as StageKey;
   }
 
-  if (value.includes("prezydent") || value.includes("podpis") || value.includes("opublikow")) {
+  if (value.includes("opublikow") || value.includes("ogłosz") || value.includes("dz.u.")) {
+    return "opublikowana";
+  }
+
+  if (value.includes("prezydent") || value.includes("podpis") || value.includes("weto")) {
     return "prezydent";
   }
 
@@ -46,8 +59,24 @@ export function resolveStageKey(etap: string | null | undefined): StageKey {
     return "senat";
   }
 
+  // Nazwy etapów z API bywają mylące dla prostego dopasowania po słowie "Sejm":
+  // "Projekt wpłynął do Sejmu" to dopiero wpływ druku, a nie prace w izbie.
+  // Bez tego wyjątku każdy otwarty proces lądował na etapie "Sejm".
+  if (
+    value.startsWith("skierowanie") ||
+    value.includes("wpłynął") ||
+    value.includes("wpłynęło")
+  ) {
+    return "projekt";
+  }
+
   if (value.includes("komisj")) {
     return "komisje";
+  }
+
+  // Samo skierowanie do czytania nie oznacza, że czytanie się odbyło.
+  if (value.startsWith("skierowano")) {
+    return "projekt";
   }
 
   if (value.includes("czytanie") || value.includes("głosowan") || value.includes("sejm")) {
@@ -59,6 +88,14 @@ export function resolveStageKey(etap: string | null | undefined): StageKey {
 
 export function resolveStageIndex(etap: string | null | undefined): number {
   return STAGE_KEYS.indexOf(resolveStageKey(etap));
+}
+
+/**
+ * Pierwsze głosowanie odbywa się dopiero na sali sejmowej, więc druki
+ * z wcześniejszych etapów nie mają jeszcze żadnych głosów do pokazania.
+ */
+export function hasReachedVoting(etap: string | null | undefined): boolean {
+  return resolveStageIndex(etap) >= STAGE_KEYS.indexOf("sejm");
 }
 
 export function getStageLabel(etap: string | null | undefined): string {

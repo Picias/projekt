@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   ArrowRightLeft,
   ChevronLeft,
+  FileDown,
   FileText,
   Lightbulb,
   Sparkles,
@@ -12,11 +13,13 @@ import {
 } from "lucide-react";
 
 import LegislativeProgress from "@/components/legislative-progress";
+import UstawaWatchedVotes from "@/components/ustawa-watched-votes";
 import WatchUstawaButton from "@/components/watch-ustawa-button";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   formatUstawaDate,
   getStageLabel,
+  hasReachedVoting,
   shortenTitle,
   type Ustawa,
 } from "@/lib/ustawa";
@@ -174,6 +177,11 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
         </p>
       </section>
 
+      <UstawaWatchedVotes
+        ustawaId={ustawa.id}
+        hasVoting={hasReachedVoting(ustawa.etap_legislacyjny)}
+      />
+
       <section aria-labelledby="metryka" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <FileText size={18} className="text-emerald-300" aria-hidden />
@@ -197,6 +205,41 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
             <MetaRow label="Etap" value={getStageLabel(ustawa.etap_legislacyjny)} />
           </dl>
         </article>
+
+        {ustawa.pdf_url ? (
+          <a
+            href={ustawa.pdf_url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-4 transition-colors hover:border-emerald-400/45 hover:bg-emerald-400/15"
+          >
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+              <FileDown size={20} strokeWidth={1.9} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-white">
+                Czytaj oryginał (PDF)
+              </span>
+              <span className="block text-xs text-white/50">
+                Pełna treść druku nr {ustawa.numer_druku} z serwera Sejmu
+              </span>
+            </span>
+          </a>
+        ) : (
+          <div className="flex items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-white/5 p-4">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/35">
+              <FileDown size={20} strokeWidth={1.9} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-white/60">
+                Czytaj oryginał (PDF)
+              </span>
+              <span className="block text-xs text-white/40">
+                API Sejmu nie udostępnia skanu tego druku.
+              </span>
+            </span>
+          </div>
+        )}
 
         <LegislativeProgress etap={ustawa.etap_legislacyjny} />
 

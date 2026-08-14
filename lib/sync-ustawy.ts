@@ -1,16 +1,35 @@
-import { fetchSejmJson, SEJM_API_BASE, SEJM_TERM } from "@/lib/sejm-api";
+import {
+  fetchSejmJson,
+  mapWithConcurrency,
+  SEJM_API_BASE,
+  SEJM_TERM,
+} from "@/lib/sejm-api";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { buildHumanSummary } from "@/lib/ustawa-human-summary";
 import { resolveStageKey, type StageKey } from "@/lib/ustawa";
 
-const DEFAULT_PRINT_LIMIT = 10;
+// API Sejmu przyjmuje limit i offset tylko na liście procesów legislacyjnych —
+// endpoint /prints zwraca całą kadencję jednym strzałem i nie da się go stronicować.
+const PROCESS_PAGE_SIZE = 200;
+const MAX_PROCESS_PAGES = 50;
+const BILL_DOCUMENT_TYPE = "projekt ustawy";
 
-type SejmPrint = {
+// Etap wynika ze szczegółów procesu, więc dla druków bez rozstrzygnięcia trzeba
+// dobić po jednym zapytaniu na druk. Kadencja X to ok. 900 projektów, co przy tej
+// równoległości mieści się w kilkunastu sekundach.
+const PROCESS_DETAIL_CONCURRENCY = 12;
+const UPSERT_CHUNK_SIZE = 200;
+
+type SejmProcessHeader = {
   number?: string;
   title?: string;
   documentDate?: string;
-  deliveryDate?: string;
+  processStartDate?: string;
   changeDate?: string;
+  comments?: string;
+  description?: string;
+  passed?: boolean;
+  displayAddress?: string;
 };
 
 type SejmProcessStage = {
@@ -25,12 +44,25 @@ type SejmProcessDetails = {
   stages?: SejmProcessStage[];
 };
 
+type SejmPrint = {
+  number?: string;
+  deliveryDate?: string;
+  documentDate?: string;
+  attachments?: string[];
+};
+
+type PrintInfo = {
+  deliveryDate: string | null;
+  pdfUrl: string | null;
+};
+
 type UstawaMetadataRow = {
   numer_druku: string;
   tytul_oficjalny: string;
   autor: string | null;
   data_wplywu: string | null;
   etap_legislacyjny: StageKey;
+  pdf_url: string | null;
   zaktualizowano_at: string;
 };
 
@@ -43,30 +75,52 @@ export type SyncUstawyResult = {
   message?: string;
 };
 
-const AUTHOR_PREFIXES: { prefix: string; autor: string }[] = [
-  { prefix: "rządowy", autor: "Rada Ministrów" },
-  { prefix: "poselski", autor: "Grupa posłów" },
-  { prefix: "obywatelski", autor: "Inicjatywa obywatelska" },
-  { prefix: "senacki", autor: "Senat" },
-  { prefix: "prezydencki", autor: "Prezydent RP" },
-  { prefix: "komisyjny", autor: "Komisja sejmowa" },
+const AUTHOR_KEYWORDS: { keywords: string[]; autor: string }[] = [
+  // Prezydent idzie pierwszy, bo jego druki nie mają własnego przymiotnika —
+  // API opisuje je jako "Przedstawiony przez Prezydenta Rzeczypospolitej Polskiej
+  // projekt ustawy...", więc rozpoznaje je dopiero samo słowo "Prezydent".
+  { keywords: ["prezydent"], autor: "Prezydent RP" },
+  { keywords: ["rządow", "rady ministrów", "rada ministrów"], autor: "Rada Ministrów" },
+  { keywords: ["poselski"], autor: "Grupa posłów" },
+  { keywords: ["obywatelski"], autor: "Inicjatywa obywatelska" },
+  { keywords: ["senacki"], autor: "Senat" },
+  { keywords: ["komisyjny", "komisji"], autor: "Komisja sejmowa" },
 ];
 
-export function resolveAutor(title: string): string | null {
+/**
+ * Tytuł druku ma stały układ "<wnioskodawca> projekt ustawy o ...". Szukanie
+ * słów kluczowych w całym tytule myliło wnioskodawcę z przedmiotem regulacji
+ * (np. "ustawa o wynagrodzeniu Prezydenta RP"), dlatego przycinamy tytuł do
+ * członu opisującego autora.
+ */
+function authorSegment(title: string): string {
   const normalized = title.trim().toLowerCase();
+  const match = normalized.match(/projekt\s+(ustawy|uchwały)/);
 
-  for (const { prefix, autor } of AUTHOR_PREFIXES) {
-    if (normalized.startsWith(prefix)) {
+  return match && match.index && match.index > 0
+    ? normalized.slice(0, match.index)
+    : normalized;
+}
+
+export function resolveAutor(title: string, comments?: string | null): string | null {
+  const segment = authorSegment(title);
+
+  for (const { keywords, autor } of AUTHOR_KEYWORDS) {
+    if (keywords.some((keyword) => segment.includes(keyword))) {
       return autor;
     }
   }
 
-  if (normalized.includes("rady ministrów") || normalized.includes("rada ministrów")) {
-    return "Rada Ministrów";
+  // Druki wniesione w poprzedniej kadencji miewają wnioskodawcę wyłącznie
+  // w komentarzu procesu.
+  const note = comments?.toLowerCase() ?? "";
+
+  if (note.includes("prezydent")) {
+    return "Prezydent RP";
   }
 
-  if (normalized.startsWith("sprawozdanie komisji") || normalized.startsWith("opinia komisji")) {
-    return "Komisja sejmowa";
+  if (note.includes("obywatelsk")) {
+    return "Inicjatywa obywatelska";
   }
 
   return null;
@@ -90,35 +144,50 @@ function collectStageNames(stages: SejmProcessStage[] | undefined): string[] {
   return names;
 }
 
-const STAGE_ORDER: StageKey[] = ["projekt", "komisje", "sejm", "senat", "prezydent"];
+const STAGE_ORDER: StageKey[] = [
+  "projekt",
+  "komisje",
+  "sejm",
+  "senat",
+  "prezydent",
+  "opublikowana",
+];
 
 /**
  * Etap wyznaczamy z realnego procesu legislacyjnego: bierzemy najdalej
  * zaawansowany etap, jaki pojawił się w historii druku.
  */
-async function resolveEtapLegislacyjny(printNumber: string): Promise<StageKey> {
-  const process = await fetchSejmJson<SejmProcessDetails>(
-    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/processes/${encodeURIComponent(printNumber)}`,
-    { revalidate: 0, timeoutMs: 10_000 },
-  );
-
-  if (!process) {
-    return "projekt";
+async function resolveEtapLegislacyjny(process: SejmProcessHeader): Promise<StageKey> {
+  // Adres publikacji w Dzienniku Ustaw kończy proces, a flaga passed oznacza
+  // uchwalenie — obie informacje są już w nagłówku, więc oszczędzają zapytanie.
+  if (process.displayAddress) {
+    return "opublikowana";
   }
 
-  if (process.passed || process.displayAddress) {
+  if (process.passed) {
     return "prezydent";
   }
 
-  const stageNames = collectStageNames(process.stages);
+  const details = await fetchSejmJson<SejmProcessDetails>(
+    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/processes/${encodeURIComponent(process.number!)}`,
+    { revalidate: 0, timeoutMs: 10_000 },
+  );
 
-  if (stageNames.length === 0) {
+  if (!details) {
     return "projekt";
+  }
+
+  if (details.displayAddress) {
+    return "opublikowana";
+  }
+
+  if (details.passed) {
+    return "prezydent";
   }
 
   let furthest = 0;
 
-  for (const name of stageNames) {
+  for (const name of collectStageNames(details.stages)) {
     const index = STAGE_ORDER.indexOf(resolveStageKey(name));
 
     if (index > furthest) {
@@ -129,157 +198,226 @@ async function resolveEtapLegislacyjny(printNumber: string): Promise<StageKey> {
   return STAGE_ORDER[furthest];
 }
 
-function printDate(print: SejmPrint): string {
-  return print.deliveryDate ?? print.documentDate ?? print.changeDate ?? "";
-}
+/**
+ * Lista procesów jest stronicowana — czytamy kolejne strony, aż API zwróci
+ * mniej pozycji niż wynosi rozmiar strony.
+ */
+async function fetchAllBillProcesses(): Promise<SejmProcessHeader[]> {
+  const all: SejmProcessHeader[] = [];
+  const seen = new Set<string>();
 
-function selectNewestPrints(prints: SejmPrint[], limit: number): SejmPrint[] {
-  const usable = prints.filter((print) => print.number && print.title);
+  for (let page = 0; page < MAX_PROCESS_PAGES; page += 1) {
+    const params = new URLSearchParams({
+      documentType: BILL_DOCUMENT_TYPE,
+      limit: String(PROCESS_PAGE_SIZE),
+      offset: String(page * PROCESS_PAGE_SIZE),
+    });
 
-  const sorted = [...usable].sort((a, b) => printDate(b).localeCompare(printDate(a)));
+    const batch = await fetchSejmJson<SejmProcessHeader[]>(
+      `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/processes?${params}`,
+      { revalidate: 0, timeoutMs: 20_000 },
+    );
 
-  // Moduł dotyczy ustaw, więc projekty ustaw mają pierwszeństwo nad
-  // opiniami i sprawozdaniami. Brakującą liczbę uzupełniamy pozostałymi drukami.
-  const bills = sorted.filter((print) =>
-    print.title!.toLowerCase().includes("projekt ustawy"),
-  );
+    if (!batch || batch.length === 0) {
+      break;
+    }
 
-  if (bills.length >= limit) {
-    return bills.slice(0, limit);
+    for (const process of batch) {
+      if (process.number && process.title && !seen.has(process.number)) {
+        seen.add(process.number);
+        all.push(process);
+      }
+    }
+
+    if (batch.length < PROCESS_PAGE_SIZE) {
+      break;
+    }
   }
 
-  const rest = sorted.filter((print) => !bills.includes(print));
+  return all;
+}
 
-  return [...bills, ...rest].slice(0, limit);
+function pickPdfAttachment(print: SejmPrint): string | null {
+  const attachments = print.attachments ?? [];
+  const pdfs = attachments.filter((name) => name.toLowerCase().endsWith(".pdf"));
+
+  if (pdfs.length === 0) {
+    return null;
+  }
+
+  // Druk bywa rozbity na uzasadnienie i załączniki — plik nazwany numerem druku
+  // to treść właściwa, więc ma pierwszeństwo przed resztą.
+  return pdfs.find((name) => name === `${print.number}.pdf`) ?? pdfs[0];
+}
+
+async function fetchPrintIndex(): Promise<Map<string, PrintInfo>> {
+  const prints = await fetchSejmJson<SejmPrint[]>(
+    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/prints`,
+    { revalidate: 0, timeoutMs: 30_000 },
+  );
+
+  const index = new Map<string, PrintInfo>();
+
+  for (const print of prints ?? []) {
+    if (!print.number) {
+      continue;
+    }
+
+    const attachment = pickPdfAttachment(print);
+
+    index.set(print.number, {
+      deliveryDate: print.deliveryDate ?? print.documentDate ?? null,
+      pdfUrl: attachment
+        ? `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/prints/${encodeURIComponent(print.number)}/${encodeURIComponent(attachment)}`
+        : null,
+    });
+  }
+
+  return index;
+}
+
+function processDate(process: SejmProcessHeader): string {
+  return process.documentDate ?? process.processStartDate ?? process.changeDate ?? "";
+}
+
+async function upsertInChunks<T extends { numer_druku: string }>(
+  rows: T[],
+): Promise<string | null> {
+  for (let start = 0; start < rows.length; start += UPSERT_CHUNK_SIZE) {
+    const { error } = await supabaseAdmin
+      .from("ustawy")
+      .upsert(rows.slice(start, start + UPSERT_CHUNK_SIZE), {
+        onConflict: "numer_druku",
+      });
+
+    if (error) {
+      return error.message;
+    }
+  }
+
+  return null;
 }
 
 export async function syncUstawy(options: {
   limit?: number;
   refreshSummaries?: boolean;
 }): Promise<SyncUstawyResult> {
-  const limit = options.limit ?? DEFAULT_PRINT_LIMIT;
+  const processes = await fetchAllBillProcesses();
 
-  const prints = await fetchSejmJson<SejmPrint[]>(
-    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/prints?sort=-documentDate`,
-    { revalidate: 0, timeoutMs: 20_000 },
-  );
-
-  if (!prints || prints.length === 0) {
+  if (processes.length === 0) {
     return {
       status: "error",
       synced: 0,
       summariesGenerated: 0,
       drukiFromApi: 0,
       numery: [],
-      message: "API Sejmu nie zwróciło listy druków",
+      message: "API Sejmu nie zwróciło listy procesów legislacyjnych",
     };
   }
 
-  const selected = selectNewestPrints(prints, limit);
+  const sorted = [...processes].sort((a, b) =>
+    processDate(b).localeCompare(processDate(a)),
+  );
 
-  if (selected.length === 0) {
+  const selected = options.limit ? sorted.slice(0, options.limit) : sorted;
+  const numery = selected.map((process) => process.number!);
+
+  const printIndex = await fetchPrintIndex();
+
+  // Podsumowania są kosztowne do wygenerowania i z czasem będą pochodzić
+  // z modelu, więc raz opisanych druków nie nadpisujemy bez wyraźnej prośby.
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("ustawy")
+    .select("numer_druku, opis_ludzki")
+    .not("opis_ludzki", "is", null)
+    .range(0, 9999);
+
+  if (existingError) {
     return {
       status: "error",
       synced: 0,
       summariesGenerated: 0,
-      drukiFromApi: prints.length,
+      drukiFromApi: processes.length,
       numery: [],
-      message: "Brak druków spełniających kryteria",
+      message: existingError.message,
     };
   }
 
-  const numery = selected.map((print) => print.number!);
-
-  const { data: existing } = await supabaseAdmin
-    .from("ustawy")
-    .select("numer_druku, opis_ludzki")
-    .in("numer_druku", numery);
-
   const alreadyDescribed = new Set(
-    (existing ?? [])
-      .filter((row) => Boolean((row as { opis_ludzki: string | null }).opis_ludzki))
-      .map((row) => (row as { numer_druku: string }).numer_druku),
+    (existing ?? []).map((row) => (row as { numer_druku: string }).numer_druku),
   );
 
   const timestamp = new Date().toISOString();
-  const metadataOnly: UstawaMetadataRow[] = [];
-  const withSummary: (UstawaMetadataRow & {
-    opis_ludzki: string;
-    kogo_dotyczy: string;
-    co_zmienia: string;
-    koszty_i_finansowanie: string;
-  })[] = [];
 
-  for (const print of selected) {
-    const numerDruku = print.number!;
-    const tytul = print.title!.trim();
-    const autor = resolveAutor(tytul);
+  const rows = await mapWithConcurrency(
+    selected,
+    PROCESS_DETAIL_CONCURRENCY,
+    async (process) => {
+      const numerDruku = process.number!;
+      const tytul = process.title!.trim();
+      const autor = resolveAutor(tytul, process.comments);
+      const print = printIndex.get(numerDruku);
 
-    const row: UstawaMetadataRow = {
-      numer_druku: numerDruku,
-      tytul_oficjalny: tytul,
-      autor,
-      data_wplywu: print.deliveryDate ?? print.documentDate ?? null,
-      etap_legislacyjny: await resolveEtapLegislacyjny(numerDruku),
-      zaktualizowano_at: timestamp,
+      const row: UstawaMetadataRow = {
+        numer_druku: numerDruku,
+        tytul_oficjalny: tytul,
+        autor,
+        data_wplywu:
+          print?.deliveryDate ??
+          process.processStartDate ??
+          process.documentDate ??
+          null,
+        etap_legislacyjny: await resolveEtapLegislacyjny(process),
+        pdf_url: print?.pdfUrl ?? null,
+        zaktualizowano_at: timestamp,
+      };
+
+      const keepExistingSummary =
+        alreadyDescribed.has(numerDruku) && !options.refreshSummaries;
+
+      return keepExistingSummary
+        ? row
+        : { ...row, ...buildHumanSummary({ title: tytul, autor }) };
+    },
+  );
+
+  // Kolumny tagi celowo nie ma w zapisie — wypełni ją warstwa AI, a wysłanie
+  // pustej tablicy kasowałoby jej wynik przy każdej synchronizacji.
+  const withSummary = rows.filter((row) => "opis_ludzki" in row);
+  const metadataOnly = rows.filter((row) => !("opis_ludzki" in row));
+  const summariesGenerated = withSummary.length;
+
+  const summaryError = await upsertInChunks(withSummary);
+
+  if (summaryError) {
+    return {
+      status: "error",
+      synced: 0,
+      summariesGenerated: 0,
+      drukiFromApi: processes.length,
+      numery,
+      message: summaryError,
     };
-
-    const keepExistingSummary =
-      alreadyDescribed.has(numerDruku) && !options.refreshSummaries;
-
-    if (keepExistingSummary) {
-      metadataOnly.push(row);
-      continue;
-    }
-
-    withSummary.push({ ...row, ...buildHumanSummary({ title: tytul, autor }) });
   }
 
-  let synced = 0;
+  const metadataError = await upsertInChunks(metadataOnly);
 
-  if (withSummary.length > 0) {
-    const { error } = await supabaseAdmin
-      .from("ustawy")
-      .upsert(withSummary, { onConflict: "numer_druku" });
-
-    if (error) {
-      return {
-        status: "error",
-        synced: 0,
-        summariesGenerated: 0,
-        drukiFromApi: prints.length,
-        numery,
-        message: error.message,
-      };
-    }
-
-    synced += withSummary.length;
-  }
-
-  if (metadataOnly.length > 0) {
-    const { error } = await supabaseAdmin
-      .from("ustawy")
-      .upsert(metadataOnly, { onConflict: "numer_druku" });
-
-    if (error) {
-      return {
-        status: "error",
-        synced,
-        summariesGenerated: withSummary.length,
-        drukiFromApi: prints.length,
-        numery,
-        message: error.message,
-      };
-    }
-
-    synced += metadataOnly.length;
+  if (metadataError) {
+    return {
+      status: "error",
+      synced: withSummary.length,
+      summariesGenerated,
+      drukiFromApi: processes.length,
+      numery,
+      message: metadataError,
+    };
   }
 
   return {
     status: "ok",
-    synced,
-    summariesGenerated: withSummary.length,
-    drukiFromApi: prints.length,
+    synced: rows.length,
+    summariesGenerated,
+    drukiFromApi: processes.length,
     numery,
   };
 }
