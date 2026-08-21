@@ -12,40 +12,28 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import GenerateAiSummary from "@/components/generate-ai-summary";
+import GlosObywateli from "@/components/glos-obywateli";
 import LegislativeProgress from "@/components/legislative-progress";
 import UstawaWatchedVotes from "@/components/ustawa-watched-votes";
 import WatchUstawaButton from "@/components/watch-ustawa-button";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   formatUstawaDate,
   getStageLabel,
+  hasAiSummary,
   hasReachedVoting,
   shortenTitle,
-  type Ustawa,
 } from "@/lib/ustawa";
+import { fetchUstawaByParam } from "@/lib/ustawa-db";
 import { detectDziedzina } from "@/lib/ustawa-human-summary";
 
 type UstawaPageProps = {
   params: Promise<{ id: string }>;
 };
 
-async function fetchUstawa(idOrNumer: string): Promise<Ustawa | null> {
-  const numericId = Number(idOrNumer);
-  const column = Number.isInteger(numericId) && idOrNumer.trim() !== "" ? "id" : "numer_druku";
-  const value = column === "id" ? numericId : decodeURIComponent(idOrNumer);
-
-  const { data } = await supabaseAdmin
-    .from("ustawy")
-    .select("*")
-    .eq(column, value)
-    .maybeSingle();
-
-  return (data as Ustawa | null) ?? null;
-}
-
 export async function generateMetadata({ params }: UstawaPageProps) {
   const { id } = await params;
-  const ustawa = await fetchUstawa(id);
+  const ustawa = await fetchUstawaByParam(id);
 
   if (!ustawa) {
     return { title: "Ustawa nie znaleziona — SEJM ON" };
@@ -101,13 +89,14 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 export default async function UstawaPage({ params }: UstawaPageProps) {
   const { id } = await params;
-  const ustawa = await fetchUstawa(id);
+  const ustawa = await fetchUstawaByParam(id);
 
   if (!ustawa) {
     notFound();
   }
 
   const dziedzina = detectDziedzina(ustawa.tytul_oficjalny);
+  const aiReady = hasAiSummary(ustawa);
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
@@ -143,33 +132,34 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
           <h2 id="zrozum-ustawe" className="text-lg font-semibold">
             Zrozum ustawę
           </h2>
-          <span className="ml-auto rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
-            Wersja demo
-          </span>
         </div>
 
-        <div className="grid gap-3">
-          <UnderstandCard
-            icon={Lightbulb}
-            label="W skrócie"
-            content={ustawa.opis_ludzki}
-          />
-          <UnderstandCard
-            icon={Users}
-            label="Kogo to dotyczy?"
-            content={ustawa.kogo_dotyczy}
-          />
-          <UnderstandCard
-            icon={ArrowRightLeft}
-            label="Co realnie zmienia?"
-            content={ustawa.co_zmienia}
-          />
-          <UnderstandCard
-            icon={Wallet}
-            label="Skąd na to pieniądze?"
-            content={ustawa.koszty_i_finansowanie}
-          />
-        </div>
+        {aiReady ? (
+          <div className="grid gap-3">
+            <UnderstandCard
+              icon={Lightbulb}
+              label="W skrócie"
+              content={ustawa.ai_w_skrocie}
+            />
+            <UnderstandCard
+              icon={Users}
+              label="Kogo to dotyczy?"
+              content={ustawa.ai_kogo_dotyczy}
+            />
+            <UnderstandCard
+              icon={ArrowRightLeft}
+              label="Co realnie zmienia?"
+              content={ustawa.ai_co_zmienia}
+            />
+            <UnderstandCard
+              icon={Wallet}
+              label="Skąd na to pieniądze?"
+              content={ustawa.ai_skad_pieniadze}
+            />
+          </div>
+        ) : (
+          <GenerateAiSummary numerDruku={ustawa.numer_druku} />
+        )}
 
         <p className="mt-3 text-xs leading-relaxed text-white/35">
           Podsumowania powstają automatycznie i mają charakter pomocniczy. Wiążąca jest
@@ -181,6 +171,8 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
         ustawaId={ustawa.id}
         hasVoting={hasReachedVoting(ustawa.etap_legislacyjny)}
       />
+
+      <GlosObywateli ustawaId={ustawa.id} />
 
       <section aria-labelledby="metryka" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
@@ -243,7 +235,11 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
 
         <LegislativeProgress etap={ustawa.etap_legislacyjny} />
 
-        <WatchUstawaButton ustawaId={ustawa.id} numerDruku={ustawa.numer_druku} />
+        <WatchUstawaButton
+          ustawaId={ustawa.id}
+          numerDruku={ustawa.numer_druku}
+          liczbaObserwujacych={ustawa.liczba_obserwujacych ?? 0}
+        />
 
         <a
           href={`https://api.sejm.gov.pl/sejm/term10/prints/${encodeURIComponent(ustawa.numer_druku)}`}

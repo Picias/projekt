@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
-import { getAnonymousUserId } from "@/lib/anonymous-user";
+
+import { loginHref } from "@/lib/profile";
+import { useAuthUser } from "@/lib/use-auth-user";
 
 type WatchMpButtonProps = {
   poselId: number;
@@ -15,6 +18,9 @@ export default function WatchMpButton({
   poselName,
   className = "",
 }: WatchMpButtonProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const user = useAuthUser();
   const [watching, setWatching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -23,17 +29,8 @@ export default function WatchMpButton({
     let cancelled = false;
 
     async function loadWatchState() {
-      const userId = getAnonymousUserId();
-
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
-
       try {
-        const response = await fetch(
-          `/api/obserwowani?user_id=${encodeURIComponent(userId)}&posel_id=${poselId}`,
-        );
+        const response = await fetch(`/api/obserwowani?posel_id=${poselId}`);
 
         if (!response.ok) {
           return;
@@ -56,16 +53,15 @@ export default function WatchMpButton({
     return () => {
       cancelled = true;
     };
-  }, [poselId]);
+  }, [poselId, user?.id]);
 
   async function handleToggle() {
-    if (pending) {
+    if (pending || user === undefined) {
       return;
     }
 
-    const userId = getAnonymousUserId();
-
-    if (!userId) {
+    if (!user) {
+      router.push(loginHref(pathname));
       return;
     }
 
@@ -75,8 +71,13 @@ export default function WatchMpButton({
       const response = await fetch("/api/obserwowani", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, posel_id: poselId }),
+        body: JSON.stringify({ posel_id: poselId }),
       });
+
+      if (response.status === 401) {
+        router.push(loginHref(pathname));
+        return;
+      }
 
       if (!response.ok) {
         return;
@@ -98,7 +99,7 @@ export default function WatchMpButton({
           : `Obserwuj ${poselName}`
       }
       aria-pressed={watching}
-      disabled={loading || pending}
+      disabled={loading || pending || user === undefined}
       onClick={handleToggle}
       className={`flex size-10 items-center justify-center rounded-full transition-colors ${
         watching

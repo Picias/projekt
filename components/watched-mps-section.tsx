@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Heart, Users } from "lucide-react";
 import MpCard from "@/components/mp-card";
-import { getAnonymousUserId } from "@/lib/anonymous-user";
+import { useAuthUser } from "@/lib/use-auth-user";
 import type { Posel } from "@/lib/posel";
 
 function WatchedMpsSkeleton() {
@@ -45,6 +45,7 @@ function WatchedMpsEmpty() {
 }
 
 export default function WatchedMpsSection() {
+  const user = useAuthUser();
   const [poslowie, setPoslowie] = useState<Posel[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,9 +54,11 @@ export default function WatchedMpsSection() {
     let cancelled = false;
 
     async function loadWatchedMps() {
-      const userId = getAnonymousUserId();
+      if (user === undefined) {
+        return;
+      }
 
-      if (!userId) {
+      if (!user) {
         if (!cancelled) {
           setPoslowie([]);
           setLoading(false);
@@ -64,9 +67,7 @@ export default function WatchedMpsSection() {
       }
 
       try {
-        const response = await fetch(
-          `/api/obserwowani?user_id=${encodeURIComponent(userId)}`,
-        );
+        const response = await fetch("/api/obserwowani");
 
         if (!response.ok) {
           throw new Error("Nie udało się pobrać obserwowanych posłów.");
@@ -98,7 +99,7 @@ export default function WatchedMpsSection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user]);
 
   return (
     <section>

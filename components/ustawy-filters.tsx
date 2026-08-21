@@ -1,34 +1,45 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 
 import {
-  AUTHOR_FILTERS,
   buildUstawyQuery,
   countActiveUstawyFilters,
-  STAGE_FILTERS,
-  TAG_FILTERS,
+  EMPTY_USTAWY_FILTERS,
+  hasActiveUstawyFilters,
+  parseUstawySearchParams,
   USTAWY_PAGE_SIZE,
+  type UstawyFilterOption,
+  type UstawyFilterOptions,
   type UstawyFilters as Filters,
 } from "@/lib/ustawa-filters";
 
 type PillGroupProps = {
   label: string;
-  options: { value: string; label: string }[];
+  allLabel?: string;
+  options: UstawyFilterOption[];
   value: string;
   onSelect: (value: string) => void;
 };
 
-function PillGroup({ label, options, value, onSelect }: PillGroupProps) {
+function PillGroup({
+  label,
+  allLabel = "Wszystkie",
+  options,
+  value,
+  onSelect,
+}: PillGroupProps) {
+  const pills = [{ value: "", label: allLabel }, ...options];
+
   return (
     <fieldset>
       <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
         {label}
       </legend>
       <div className="flex flex-wrap gap-2">
-        {options.map((option) => {
+        {pills.map((option) => {
           const isActive = option.value === value;
 
           return (
@@ -52,32 +63,29 @@ function PillGroup({ label, options, value, onSelect }: PillGroupProps) {
   );
 }
 
-const STAGE_OPTIONS = [
-  { value: "", label: "Wszystkie" },
-  ...STAGE_FILTERS.map((stage) => ({ value: stage.key, label: stage.label })),
-];
-
-const AUTHOR_OPTIONS = [
-  { value: "", label: "Wszyscy" },
-  ...AUTHOR_FILTERS.map((filter) => ({ value: filter.key, label: filter.label })),
-];
-
-const TAG_OPTIONS = [
-  { value: "", label: "Wszystkie" },
-  ...TAG_FILTERS.map((tag) => ({ value: tag, label: tag })),
-];
-
-export default function UstawyFilters({ filters }: { filters: Filters }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [query, setQuery] = useState(filters.q);
-  const [urlQuery, setUrlQuery] = useState(filters.q);
-  const [panelOpen, setPanelOpen] = useState(
-    () => countActiveUstawyFilters(filters) > 0,
+export function UstawyFiltersFallback() {
+  return (
+    <div className="flex items-center gap-2" aria-hidden>
+      <div className="h-12 flex-1 animate-pulse rounded-2xl bg-white/10" />
+      <div className="size-12 shrink-0 animate-pulse rounded-2xl bg-white/10" />
+    </div>
   );
+}
 
+export default function UstawyFilters({ options }: { options: UstawyFilterOptions }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const filters = parseUstawySearchParams(searchParams);
   const { q, etap, autor, tag } = filters;
+
+  const [isPending, startTransition] = useTransition();
+  const [query, setQuery] = useState(q);
+  const [urlQuery, setUrlQuery] = useState(q);
+  const [panelOpen, setPanelOpen] = useState(() => countActiveUstawyFilters(filters) > 0);
+
   const activeCount = countActiveUstawyFilters(filters);
+  const canClear = hasActiveUstawyFilters({ ...filters, q: query.trim() });
 
   // Adres URL jest źródłem prawdy, więc gdy zmieni się poza polem tekstowym
   // (cofnięcie w historii, wyczyszczenie filtrów), pole podąża za nim.
@@ -90,7 +98,7 @@ export default function UstawyFilters({ filters }: { filters: Filters }) {
     // Każda zmiana filtra wraca do pierwszej porcji wyników — inaczej
     // rozwinięta lista sugerowałaby, że nowy filtr zwrócił więcej trafień.
     const merged: Filters = {
-      q,
+      q: query,
       etap,
       autor,
       tag,
@@ -99,7 +107,14 @@ export default function UstawyFilters({ filters }: { filters: Filters }) {
     };
 
     startTransition(() => {
-      router.replace(`/ustawy${buildUstawyQuery(merged)}`, { scroll: false });
+      router.replace(`${pathname}${buildUstawyQuery(merged)}`, { scroll: false });
+    });
+  }
+
+  function clearFilters() {
+    setQuery("");
+    startTransition(() => {
+      router.replace(pathname, { scroll: false });
     });
   }
 
@@ -109,15 +124,21 @@ export default function UstawyFilters({ filters }: { filters: Filters }) {
     }
 
     const timeout = setTimeout(() => {
-      const merged: Filters = { q: query, etap, autor, tag, limit: USTAWY_PAGE_SIZE };
+      const merged: Filters = {
+        ...EMPTY_USTAWY_FILTERS,
+        q: query,
+        etap,
+        autor,
+        tag,
+      };
 
       startTransition(() => {
-        router.replace(`/ustawy${buildUstawyQuery(merged)}`, { scroll: false });
+        router.replace(`${pathname}${buildUstawyQuery(merged)}`, { scroll: false });
       });
     }, 350);
 
     return () => clearTimeout(timeout);
-  }, [query, q, etap, autor, tag, router]);
+  }, [query, q, etap, autor, tag, pathname, router]);
 
   return (
     <div className={`flex flex-col gap-3 ${isPending ? "opacity-70" : ""}`}>
@@ -168,40 +189,39 @@ export default function UstawyFilters({ filters }: { filters: Filters }) {
         </button>
       </div>
 
+      {canClear ? (
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="flex w-fit items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/55 transition-colors hover:border-white/25 hover:text-white"
+        >
+          <X size={12} aria-hidden />
+          Wyczyść filtry
+        </button>
+      ) : null}
+
       {panelOpen ? (
         <div className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-navy-800/60 p-4">
           <PillGroup
             label="Etap"
-            options={STAGE_OPTIONS}
+            options={options.etapy}
             value={etap}
-            onSelect={(value) => apply({ etap: value as Filters["etap"] })}
+            onSelect={(value) => apply({ etap: value })}
           />
           <PillGroup
             label="Wnioskodawca"
-            options={AUTHOR_OPTIONS}
+            allLabel="Wszyscy"
+            options={options.autorzy}
             value={autor}
             onSelect={(value) => apply({ autor: value })}
           />
-          <PillGroup
-            label="Tagi"
-            options={TAG_OPTIONS}
-            value={tag}
-            onSelect={(value) => apply({ tag: value })}
-          />
-
-          <p className="text-[11px] leading-relaxed text-white/35">
-            Tagi tematyczne będzie nadawać automatyczna analiza treści druku —
-            dziś żaden druk nie ma jeszcze przypisanego tagu.
-          </p>
-
-          {activeCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => apply({ etap: "", autor: "", tag: "" })}
-              className="w-fit text-xs font-semibold text-sejm-green-light transition-colors hover:text-white"
-            >
-              Wyczyść filtry
-            </button>
+          {options.tagi.length > 0 ? (
+            <PillGroup
+              label="Tagi"
+              options={options.tagi}
+              value={tag}
+              onSelect={(value) => apply({ tag: value })}
+            />
           ) : null}
         </div>
       ) : null}

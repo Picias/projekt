@@ -1,61 +1,20 @@
 import { NextResponse } from "next/server";
 
+import { fetchWatchedPoslowie } from "@/lib/obserwowani-db";
+import { getSessionUserId } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import type { Posel } from "@/lib/posel";
-
-async function fetchWatchedPoslowie(userId: string): Promise<Posel[]> {
-  const { data: joined, error: joinError } = await supabaseAdmin
-    .from("obserwowani")
-    .select("posel_id, poslowie(id, imie_nazwisko, partia, zdjecie_url)")
-    .eq("user_id", userId);
-
-  if (!joinError && joined) {
-    const poslowie = joined
-      .map((row) => row.poslowie as Posel | Posel[] | null)
-      .flatMap((posel) => (posel ? (Array.isArray(posel) ? posel : [posel]) : []));
-
-    if (poslowie.length > 0 || joined.length === 0) {
-      return poslowie;
-    }
-  }
-
-  const { data: watched, error: watchedError } = await supabaseAdmin
-    .from("obserwowani")
-    .select("posel_id")
-    .eq("user_id", userId);
-
-  if (watchedError) {
-    throw new Error(watchedError.message);
-  }
-
-  const poselIds = (watched ?? []).map((row) => row.posel_id);
-
-  if (poselIds.length === 0) {
-    return [];
-  }
-
-  const { data: poslowie, error: poslowieError } = await supabaseAdmin
-    .from("poslowie")
-    .select("id, imie_nazwisko, partia, zdjecie_url")
-    .in("id", poselIds);
-
-  if (poslowieError) {
-    throw new Error(poslowieError.message);
-  }
-
-  return (poslowie ?? []) as Posel[];
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("user_id");
   const poselIdParam = searchParams.get("posel_id");
+  const userId = await getSessionUserId();
 
   if (!userId) {
-    return NextResponse.json(
-      { error: "Wymagany parametr: user_id" },
-      { status: 400 },
-    );
+    if (poselIdParam !== null) {
+      return NextResponse.json({ watching: false, zalogowany: false });
+    }
+
+    return NextResponse.json({ poslowie: [], zalogowany: false });
   }
 
   if (poselIdParam !== null) {
@@ -79,12 +38,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ watching: Boolean(data) });
+    return NextResponse.json({ watching: Boolean(data), zalogowany: true });
   }
 
   try {
     const poslowie = await fetchWatchedPoslowie(userId);
-    return NextResponse.json({ poslowie });
+    return NextResponse.json({ poslowie, zalogowany: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się pobrać listy.";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -93,17 +52,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const userId = await getSessionUserId();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Zaloguj się, aby obserwować posła.", code: "UNAUTHENTICATED" },
+        { status: 401 },
+      );
+    }
+
     const body = (await request.json()) as {
-      user_id?: string;
       posel_id?: number;
     };
 
-    const userId = body.user_id;
     const poselId = body.posel_id;
 
-    if (!userId || !Number.isInteger(poselId)) {
+    if (!Number.isInteger(poselId)) {
       return NextResponse.json(
-        { error: "Wymagane pola: user_id, posel_id" },
+        { error: "Wymagane pole: posel_id" },
         { status: 400 },
       );
     }

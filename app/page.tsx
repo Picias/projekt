@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import HomeWatchedUstawy from "@/components/home-watched-ustawy";
+import HotUstawy, { HotUstawySkeleton } from "@/components/hot-ustawy";
 import WatchedMpsSection from "@/components/watched-mps-section";
 import {
   fetchNextPosiedzenie,
@@ -167,6 +168,10 @@ export default function HomePage() {
       <WatchedMpsSection />
 
       <HomeWatchedUstawy />
+
+      <Suspense fallback={<HotUstawySkeleton />}>
+        <HotUstawy />
+      </Suspense>
     </div>
   );
 }

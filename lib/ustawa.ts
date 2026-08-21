@@ -11,7 +11,30 @@ export type Ustawa = {
   kogo_dotyczy: string | null;
   co_zmienia: string | null;
   koszty_i_finansowanie: string | null;
+  ai_w_skrocie: string | null;
+  ai_kogo_dotyczy: string | null;
+  ai_co_zmienia: string | null;
+  ai_skad_pieniadze: string | null;
+  liczba_obserwujacych: number;
 };
+
+export type UstawaAiSummary = Pick<
+  Ustawa,
+  "ai_w_skrocie" | "ai_kogo_dotyczy" | "ai_co_zmienia" | "ai_skad_pieniadze"
+>;
+
+/**
+ * Podsumowanie z modelu jest kompletne dopiero po zapisie wszystkich czterech
+ * pól — do tego czasu sekcja „Zrozum ustawę” pokazuje przycisk generowania.
+ */
+export function hasAiSummary(ustawa: UstawaAiSummary): boolean {
+  return Boolean(
+    ustawa.ai_w_skrocie ||
+      ustawa.ai_kogo_dotyczy ||
+      ustawa.ai_co_zmienia ||
+      ustawa.ai_skad_pieniadze,
+  );
+}
 
 export type StageKey =
   | "projekt"
@@ -121,6 +144,28 @@ export function formatUstawaDate(date: string | null | undefined): string {
   }
 
   return ustawaDateFormatter.format(parsed);
+}
+
+const licznikFormatter = new Intl.NumberFormat("pl-PL");
+
+export function formatLiczba(value: number): string {
+  return licznikFormatter.format(value);
+}
+
+/**
+ * Etykieta licznika obserwujących. Liczba pojedyncza wymaga innej formy
+ * rzeczownika niż mnoga ("1 obserwujący" vs "1 204 obserwujących").
+ */
+export function formatObserwujacy(count: number): string {
+  if (count <= 0) {
+    return "Nikt jeszcze nie obserwuje";
+  }
+
+  if (count === 1) {
+    return "1 obserwujący";
+  }
+
+  return `${formatLiczba(count)} obserwujących`;
 }
 
 /**

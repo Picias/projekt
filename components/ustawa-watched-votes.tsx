@@ -2,58 +2,40 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { MinusCircle, ThumbsDown, ThumbsUp, Vote, type LucideIcon } from "lucide-react";
+import { ArrowRight, CalendarDays, Vote } from "lucide-react";
 
 import MpAvatar from "@/components/mp-avatar";
-import { getAnonymousUserId } from "@/lib/anonymous-user";
 import { getClubLabel, getClubTheme } from "@/lib/club-colors";
-import type { Posel } from "@/lib/posel";
+import { useAuthUser } from "@/lib/use-auth-user";
+import {
+  formatDataGlosowania,
+  GLOS_INFO,
+  type GlosPosla,
+  type Glosowanie,
+} from "@/lib/glosowania";
 
 type UstawaWatchedVotesProps = {
   ustawaId: number;
-  // Głosowania trafiają do bazy osobnym modułem, więc na razie wnioskujemy
-  // z etapu, czy druk zdążył już stanąć pod głosowaniem.
+  // Etap legislacyjny mówi, czy druk w ogóle powinien mieć już głosowanie —
+  // dzięki temu rozróżniamy „jeszcze nie głosowano” od „brak danych w bazie”.
   hasVoting: boolean;
 };
 
-type VoteKind = "za" | "przeciw" | "wstrzymal";
-
-const VOTE_STYLES: Record<
-  VoteKind,
-  { label: string; icon: LucideIcon; className: string }
-> = {
-  za: {
-    label: "Za",
-    icon: ThumbsUp,
-    className: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25",
-  },
-  przeciw: {
-    label: "Przeciw",
-    icon: ThumbsDown,
-    className: "bg-red-400/15 text-red-300 ring-red-400/25",
-  },
-  wstrzymal: {
-    label: "Wstrzymał się",
-    icon: MinusCircle,
-    className: "bg-white/10 text-white/60 ring-white/15",
-  },
+type PoselZGlosem = {
+  id: number;
+  imie_nazwisko: string;
+  partia: string | null;
+  zdjecie_url: string | null;
+  glos: GlosPosla | null;
 };
 
-/**
- * Do czasu podłączenia wyników głosowań pokazujemy stały układ decyzji —
- * wyliczany z identyfikatorów, żeby nie zmieniał się przy każdym renderze.
- */
-function placeholderVote(poselId: number, ustawaId: number): VoteKind {
-  const seed = (poselId * 31 + ustawaId * 17) % 10;
-
-  if (seed < 6) {
-    return "za";
-  }
-
-  return seed < 9 ? "przeciw" : "wstrzymal";
-}
-
-function SectionShell({ children }: { children: React.ReactNode }) {
+function SectionShell({
+  children,
+  pelneWynikiHref,
+}: {
+  children: React.ReactNode;
+  pelneWynikiHref?: string;
+}) {
   return (
     <section aria-labelledby="twoi-poslowie" className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -61,12 +43,23 @@ function SectionShell({ children }: { children: React.ReactNode }) {
         <h2 id="twoi-poslowie" className="text-lg font-semibold">
           Twoi posłowie w tym głosowaniu
         </h2>
-        <span className="ml-auto rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
-          Wersja demo
-        </span>
       </div>
 
       {children}
+
+      {pelneWynikiHref ? (
+        <Link
+          href={pelneWynikiHref}
+          className="group flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-semibold text-white/70 transition-colors hover:border-emerald-400/30 hover:bg-white/10 hover:text-white"
+        >
+          Zobacz pełne wyniki głosowania (460 posłów)
+          <ArrowRight
+            size={14}
+            className="transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
+        </Link>
+      ) : null}
     </section>
   );
 }
@@ -84,38 +77,33 @@ export default function UstawaWatchedVotes({
   ustawaId,
   hasVoting,
 }: UstawaWatchedVotesProps) {
-  const [poslowie, setPoslowie] = useState<Posel[]>([]);
+  const user = useAuthUser();
+  const [glosowanie, setGlosowanie] = useState<Glosowanie | null>(null);
+  const [poslowie, setPoslowie] = useState<PoselZGlosem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadWatched() {
-      const userId = getAnonymousUserId();
-
-      if (!userId) {
-        if (!cancelled) {
-          setLoading(false);
-        }
-        return;
-      }
-
+    async function loadGlosowanie() {
       try {
-        const response = await fetch(
-          `/api/obserwowani?user_id=${encodeURIComponent(userId)}`,
-        );
+        const response = await fetch(`/api/glosowanie?ustawa_id=${ustawaId}`);
 
         if (!response.ok) {
           return;
         }
 
-        const data = (await response.json()) as { poslowie?: Posel[] };
+        const data = (await response.json()) as {
+          glosowanie?: Glosowanie | null;
+          poslowie?: PoselZGlosem[];
+        };
 
         if (!cancelled) {
+          setGlosowanie(data.glosowanie ?? null);
           setPoslowie(data.poslowie ?? []);
         }
       } catch {
-        // Nieudany odczyt zostawia pustą listę — pokażemy zachętę do obserwowania.
+        // Nieudany odczyt zostawia sekcję w stanie „brak danych o głosowaniu”.
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -123,23 +111,12 @@ export default function UstawaWatchedVotes({
       }
     }
 
-    loadWatched();
+    loadGlosowanie();
 
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  if (!hasVoting) {
-    return (
-      <SectionShell>
-        <InfoCard title="Ten druk czeka jeszcze na głosowanie">
-          Kiedy ta ustawa trafi pod głosowanie, zobaczysz tutaj decyzje polityków,
-          których obserwujesz.
-        </InfoCard>
-      </SectionShell>
-    );
-  }
+  }, [ustawaId, user?.id]);
 
   if (loading) {
     return (
@@ -149,9 +126,29 @@ export default function UstawaWatchedVotes({
     );
   }
 
-  if (poslowie.length === 0) {
+  if (!glosowanie) {
     return (
       <SectionShell>
+        <InfoCard
+          title={
+            hasVoting
+              ? "Brak zapisanych wyników głosowania"
+              : "Ten druk czeka jeszcze na głosowanie"
+          }
+        >
+          {hasVoting
+            ? "Druk trafił już pod obrady, ale wyniki nie zostały jeszcze pobrane z API Sejmu."
+            : "Kiedy ta ustawa trafi pod głosowanie, zobaczysz tutaj decyzje polityków, których obserwujesz."}
+        </InfoCard>
+      </SectionShell>
+    );
+  }
+
+  const pelneWynikiHref = `/ustawy/${ustawaId}/glosowanie`;
+
+  if (poslowie.length === 0) {
+    return (
+      <SectionShell pelneWynikiHref={pelneWynikiHref}>
         <InfoCard title="Nie obserwujesz jeszcze żadnego posła">
           Dodaj posłów do obserwowanych na{" "}
           <Link href="/poslowie" className="text-emerald-300 hover:underline">
@@ -164,12 +161,16 @@ export default function UstawaWatchedVotes({
   }
 
   return (
-    <SectionShell>
+    <SectionShell pelneWynikiHref={pelneWynikiHref}>
+      <p className="flex items-center gap-1.5 text-xs text-white/45">
+        <CalendarDays size={13} className="text-emerald-300/70" aria-hidden />
+        {formatDataGlosowania(glosowanie.data_glosowania)}
+      </p>
+
       <ul className="flex flex-col gap-2">
         {poslowie.map((posel) => {
-          const vote = VOTE_STYLES[placeholderVote(posel.id, ustawaId)];
           const theme = getClubTheme(posel.partia);
-          const VoteIcon = vote.icon;
+          const info = posel.glos ? GLOS_INFO[posel.glos] : null;
 
           return (
             <li key={posel.id}>
@@ -192,21 +193,17 @@ export default function UstawaWatchedVotes({
                   </span>
                 </span>
                 <span
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${vote.className}`}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${
+                    info ? info.badge : "bg-white/5 text-white/40 ring-white/10"
+                  }`}
                 >
-                  <VoteIcon size={13} aria-hidden />
-                  {vote.label}
+                  {info ? info.label : "Brak danych"}
                 </span>
               </Link>
             </li>
           );
         })}
       </ul>
-
-      <p className="text-xs leading-relaxed text-white/35">
-        Decyzje są na razie przykładowe. Po podłączeniu wyników głosowań pojawią się
-        tutaj realne głosy obserwowanych posłów.
-      </p>
     </SectionShell>
   );
 }

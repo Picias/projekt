@@ -1,18 +1,19 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ChevronLeft, ScrollText, SearchX } from "lucide-react";
 
 import UstawaCard from "@/components/ustawa-card";
-import UstawyFilters from "@/components/ustawy-filters";
+import UstawyFilters, { UstawyFiltersFallback } from "@/components/ustawy-filters";
 import WatchedUstawySection from "@/components/watched-ustawy-section";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Ustawa } from "@/lib/ustawa";
 import {
-  AUTHOR_FILTERS,
   buildUstawyQuery,
+  collectUstawyFilterOptions,
   countActiveUstawyFilters,
-  NAMED_AUTHORS,
   parseUstawyFilters,
   USTAWY_PAGE_SIZE,
+  type UstawyFacetRow,
   type UstawyFilters as Filters,
 } from "@/lib/ustawa-filters";
 
@@ -60,14 +61,8 @@ async function fetchUstawy(
     query = query.eq("etap_legislacyjny", filters.etap);
   }
 
-  const authorFilter = AUTHOR_FILTERS.find((filter) => filter.key === filters.autor);
-
-  if (authorFilter && authorFilter.autorzy.length > 0) {
-    query = query.in("autor", authorFilter.autorzy);
-  } else if (authorFilter) {
-    // "Inne" to dopełnienie nazwanych grup razem z drukami bez ustalonego autora.
-    const named = NAMED_AUTHORS.map((autor) => `"${autor}"`).join(",");
-    query = query.or(`autor.is.null,autor.not.in.(${named})`);
+  if (filters.autor) {
+    query = query.eq("autor", filters.autor);
   }
 
   if (filters.tag) {
@@ -79,6 +74,19 @@ async function fetchUstawy(
     .limit(filters.limit);
 
   return { ustawy: (data ?? []) as UstawaListItem[], total: count ?? 0 };
+}
+
+/**
+ * Facety filtrów biorą unikalne etapy i autorów z całej tabeli, a nie z
+ * aktualnej strony wyników — inaczej "Pokaż więcej" zmieniałoby dostępne opcje.
+ */
+async function fetchUstawyFacets(): Promise<UstawyFacetRow[]> {
+  const { data } = await supabaseAdmin
+    .from("ustawy")
+    .select("numer_druku, tytul_oficjalny, autor, etap_legislacyjny, tagi")
+    .limit(8000);
+
+  return (data ?? []) as UstawyFacetRow[];
 }
 
 function formatUstawyCount(total: number): string {
@@ -95,7 +103,11 @@ function formatUstawyCount(total: number): string {
 
 export default async function UstawyPage({ searchParams }: UstawyPageProps) {
   const filters = parseUstawyFilters(await searchParams);
-  const { ustawy, total } = await fetchUstawy(filters);
+  const [{ ustawy, total }, facetRows] = await Promise.all([
+    fetchUstawy(filters),
+    fetchUstawyFacets(),
+  ]);
+  const filterOptions = collectUstawyFilterOptions(facetRows, filters);
 
   const isBrowsing = Boolean(filters.q) || countActiveUstawyFilters(filters) > 0;
   const hasMore = ustawy.length < total;
@@ -117,7 +129,9 @@ export default async function UstawyPage({ searchParams }: UstawyPageProps) {
         </p>
       </header>
 
-      <UstawyFilters filters={filters} />
+      <Suspense fallback={<UstawyFiltersFallback />}>
+        <UstawyFilters options={filterOptions} />
+      </Suspense>
 
       {/* Skrót do własnej listy przeszkadzałby w przeglądaniu wyników, więc
           pokazujemy go tylko przy pustym wyszukiwaniu. */}

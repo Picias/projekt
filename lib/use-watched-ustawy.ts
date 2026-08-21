@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { getAnonymousUserId } from "@/lib/anonymous-user";
+import { useAuthUser } from "@/lib/use-auth-user";
 import type { Ustawa } from "@/lib/ustawa";
 
 export type WatchedUstawa = Pick<
@@ -10,11 +10,8 @@ export type WatchedUstawa = Pick<
   "id" | "numer_druku" | "tytul_oficjalny" | "autor" | "data_wplywu" | "etap_legislacyjny"
 >;
 
-/**
- * Tożsamość użytkownika żyje w localStorage, więc listę obserwowanych druków
- * można pobrać dopiero po stronie klienta.
- */
 export function useWatchedUstawy(): { ustawy: WatchedUstawa[]; loading: boolean } {
+  const user = useAuthUser();
   const [ustawy, setUstawy] = useState<WatchedUstawa[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,19 +19,20 @@ export function useWatchedUstawy(): { ustawy: WatchedUstawa[]; loading: boolean 
     let cancelled = false;
 
     async function loadWatched() {
-      const userId = getAnonymousUserId();
+      if (user === undefined) {
+        return;
+      }
 
-      if (!userId) {
+      if (!user) {
         if (!cancelled) {
+          setUstawy([]);
           setLoading(false);
         }
         return;
       }
 
       try {
-        const response = await fetch(
-          `/api/obserwowane-ustawy?user_id=${encodeURIComponent(userId)}`,
-        );
+        const response = await fetch("/api/obserwowane-ustawy");
 
         if (!response.ok) {
           return;
@@ -59,7 +57,7 @@ export function useWatchedUstawy(): { ustawy: WatchedUstawa[]; loading: boolean 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user]);
 
   return { ustawy, loading };
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getSessionUserId } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Ustawa } from "@/lib/ustawa";
 
@@ -35,13 +36,68 @@ async function fetchWatchedUstawy(userId: string): Promise<Partial<Ustawa>[]> {
   return (ustawy ?? []) as Partial<Ustawa>[];
 }
 
+/**
+ * Licznik przy druku przelicza się z tabeli obserwujących zamiast rosnąć
+ * o jeden przy każdym kliknięciu. Inkrementacja gubi się przy równoległych
+ * żądaniach i po ręcznych zmianach w bazie, a przeliczenie samo naprawia
+ * rozjazd przy najbliższym kliknięciu.
+ *
+ * Nieudany zapis licznika (np. w bazie bez kolumny liczba_obserwujacych)
+ * zwraca null zamiast wyjątku — samo obserwowanie druku ma działać dalej.
+ */
+async function refreshLiczbaObserwujacych(ustawaId: number): Promise<number | null> {
+  const { count, error } = await supabaseAdmin
+    .from("obserwowane_ustawy")
+    .select("user_id", { count: "exact", head: true })
+    .eq("ustawa_id", ustawaId);
+
+  if (error) {
+    return null;
+  }
+
+  const liczba = count ?? 0;
+
+  const { error: updateError } = await supabaseAdmin
+    .from("ustawy")
+    .update({ liczba_obserwujacych: liczba })
+    .eq("id", ustawaId);
+
+  return updateError ? null : liczba;
+}
+
+async function readLiczbaObserwujacych(ustawaId: number): Promise<number | null> {
+  const { data, error } = await supabaseAdmin
+    .from("ustawy")
+    .select("liczba_obserwujacych")
+    .eq("id", ustawaId)
+    .maybeSingle();
+
+  if (error) {
+    return null;
+  }
+
+  return (data?.liczba_obserwujacych as number | null) ?? 0;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("user_id");
   const ustawaIdParam = searchParams.get("ustawa_id");
+  const userId = await getSessionUserId();
 
   if (!userId) {
-    return NextResponse.json({ error: "Wymagany parametr: user_id" }, { status: 400 });
+    if (ustawaIdParam !== null) {
+      const ustawaId = Number(ustawaIdParam);
+
+      return NextResponse.json({
+        watching: false,
+        zalogowany: false,
+        liczba_obserwujacych: Number.isInteger(ustawaId)
+          ? await readLiczbaObserwujacych(ustawaId)
+          : null,
+      });
+    }
+
+    return NextResponse.json({ ustawy: [], zalogowany: false });
   }
 
   if (ustawaIdParam !== null) {
@@ -65,12 +121,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ watching: Boolean(data) });
+    return NextResponse.json({
+      watching: Boolean(data),
+      zalogowany: true,
+      liczba_obserwujacych: await readLiczbaObserwujacych(ustawaId),
+    });
   }
 
   try {
     const ustawy = await fetchWatchedUstawy(userId);
-    return NextResponse.json({ ustawy });
+    return NextResponse.json({ ustawy, zalogowany: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się pobrać listy.";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -79,17 +139,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const userId = await getSessionUserId();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Zaloguj się, aby śledzić ustawę.", code: "UNAUTHENTICATED" },
+        { status: 401 },
+      );
+    }
+
     const body = (await request.json()) as {
-      user_id?: string;
       ustawa_id?: number;
     };
 
-    const userId = body.user_id;
     const ustawaId = body.ustawa_id;
 
-    if (!userId || !Number.isInteger(ustawaId)) {
+    if (typeof ustawaId !== "number" || !Number.isInteger(ustawaId)) {
       return NextResponse.json(
-        { error: "Wymagane pola: user_id, ustawa_id" },
+        { error: "Wymagane pole: ustawa_id" },
         { status: 400 },
       );
     }
@@ -116,7 +183,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: deleteError.message }, { status: 500 });
       }
 
-      return NextResponse.json({ watching: false });
+      return NextResponse.json({
+        watching: false,
+        liczba_obserwujacych: await refreshLiczbaObserwujacych(ustawaId),
+      });
     }
 
     const { error: insertError } = await supabaseAdmin
@@ -127,7 +197,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ watching: true });
+    return NextResponse.json({
+      watching: true,
+      liczba_obserwujacych: await refreshLiczbaObserwujacych(ustawaId),
+    });
   } catch {
     return NextResponse.json({ error: "Nieprawidłowe żądanie" }, { status: 400 });
   }
