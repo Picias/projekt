@@ -1,9 +1,10 @@
 import {
   fetchSejmJson,
+  fetchSejmJsonList,
   fetchSejmJsonSafe,
   formatMpApiId,
+  mapWithConcurrency,
   SEJM_API_BASE,
-  SEJM_DEFAULT_LIST_LIMIT,
   SEJM_FETCH_TIMEOUT_MS,
   SEJM_RECENT_VOTES_LIMIT,
   SEJM_RECENT_VOTING_DAYS,
@@ -41,6 +42,19 @@ export type MpProfileStats = {
   fallbackMessage: string | null;
 };
 
+export const SEJM_RECENT_SITTINGS_LIMIT = 5;
+
+const FORMAL_VOTE_PATTERN =
+  /przerwę|przerwe|przerwa|odroczenie|wniosek formalny|zamknięcie posiedzenia/i;
+
+export function isFormalVote(vote: MpVote): boolean {
+  const haystack = [vote.title, vote.topic, vote.description]
+    .filter(Boolean)
+    .join(" ");
+
+  return FORMAL_VOTE_PATTERN.test(haystack);
+}
+
 export function calculateAttendance(stats: VotingStat[]): {
   percent: number | null;
   total: number;
@@ -66,25 +80,30 @@ export function calculateAttendance(stats: VotingStat[]): {
 
 export async function fetchInterpellationSummary(
   mpId: number,
-  limit = SEJM_DEFAULT_LIST_LIMIT,
 ): Promise<{ count: number | null; approximate: boolean }> {
   const mpApiId = formatMpApiId(mpId);
-  const result = await fetchSejmJsonSafe<unknown[]>(
-    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/interpellations?from=${mpApiId}&limit=${limit}&sort=-receiptDate`,
+  const result = await fetchSejmJsonList<unknown>(
+    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/interpellations?from=${mpApiId}&limit=1&sort=-receiptDate`,
     { revalidate: 3600, timeoutMs: SEJM_FETCH_TIMEOUT_MS },
   );
 
-  if (!result.data) {
+  if (result.total != null) {
+    return { count: result.total, approximate: false };
+  }
+
+  if (!result.items) {
     return { count: null, approximate: false };
   }
 
   return {
-    count: result.data.length,
-    approximate: result.data.length >= limit,
+    count: result.items.length,
+    approximate: result.items.length >= 1,
   };
 }
 
-async function fetchVotesForDay(
+// GET /sejm/term10/MP/{id}/votings/{sitting}/{date}
+// np. /MP/2/votings/47/2025-12-05 — wszystkie głosy posła w danym dniu posiedzenia.
+export async function fetchMpVotesForSitting(
   mpId: number,
   sitting: number,
   date: string,
@@ -142,7 +161,7 @@ export async function fetchRecentVotes(
       break;
     }
 
-    const votes = await fetchVotesForDay(mpId, day.sitting, day.date);
+    const votes = await fetchMpVotesForSitting(mpId, day.sitting, day.date);
     const visibleVotes = votes.filter((vote) => vote.vote !== "PRESENT");
 
     for (let index = visibleVotes.length - 1; index >= 0; index -= 1) {
@@ -155,6 +174,67 @@ export async function fetchRecentVotes(
   }
 
   return collected;
+}
+
+type SejmSitting = {
+  number?: number;
+  num?: number;
+  id?: number;
+  dates?: string[];
+};
+
+function sittingNumber(sitting: SejmSitting): number {
+  return sitting.number ?? sitting.num ?? sitting.id ?? 0;
+}
+
+export async function fetchRecentSejmSittings(
+  limit = SEJM_RECENT_SITTINGS_LIMIT,
+): Promise<{ number: number; dates: string[] }[]> {
+  const sittingsResult = await fetchSejmJsonSafe<SejmSitting[]>(
+    `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/sittings`,
+    { revalidate: 3600, timeoutMs: SEJM_FETCH_TIMEOUT_MS },
+  );
+
+  const source =
+    sittingsResult.data && sittingsResult.data.length > 0
+      ? sittingsResult.data
+      : ((
+          await fetchSejmJsonSafe<SejmSitting[]>(
+            `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/proceedings`,
+            { revalidate: 3600, timeoutMs: SEJM_FETCH_TIMEOUT_MS },
+          )
+        ).data ?? []);
+
+  return source
+    .map((sitting) => ({
+      number: sittingNumber(sitting),
+      dates: [...new Set(sitting.dates ?? [])].filter(Boolean).sort(),
+    }))
+    .filter((sitting) => sitting.number > 0 && sitting.dates.length > 0)
+    .sort((a, b) => b.number - a.number)
+    .slice(0, limit);
+}
+
+export async function fetchMpVotesFromRecentSittings(
+  mpId: number,
+  sittingLimit = SEJM_RECENT_SITTINGS_LIMIT,
+): Promise<MpVote[]> {
+  const sittings = await fetchRecentSejmSittings(sittingLimit);
+  const jobs = sittings.flatMap((sitting) =>
+    sitting.dates.map((date) => ({ sitting: sitting.number, date })),
+  );
+
+  const batches = await mapWithConcurrency(jobs, 3, ({ sitting, date }) =>
+    fetchMpVotesForSitting(mpId, sitting, date),
+  );
+
+  return batches
+    .flat()
+    .filter((vote) => vote.vote !== "PRESENT" && !isFormalVote(vote))
+    .sort(
+      (a, b) =>
+        b.date.localeCompare(a.date) || b.votingNumber - a.votingNumber,
+    );
 }
 
 export function createEmptyMpProfileStats(
@@ -195,13 +275,12 @@ export async function fetchMpProfileStats(mpId: number): Promise<MpProfileStats>
 }
 
 async function loadMpProfileStats(mpId: number): Promise<MpProfileStats> {
-  const [statsResult, interpellationSummary, recentVotes] = await Promise.all([
+  const [statsResult, interpellationSummary] = await Promise.all([
     fetchSejmJsonSafe<VotingStat[]>(
       `${SEJM_API_BASE}/sejm/term${SEJM_TERM}/MP/${mpId}/votings/stats`,
       { revalidate: 3600, timeoutMs: SEJM_FETCH_TIMEOUT_MS },
     ),
     fetchInterpellationSummary(mpId),
-    fetchRecentVotes(mpId),
   ]);
 
   const attendance = calculateAttendance(statsResult.data ?? []);
@@ -216,7 +295,7 @@ async function loadMpProfileStats(mpId: number): Promise<MpProfileStats> {
     participatedVotings: attendance.participated,
     interpellationCount: interpellationSummary.count,
     interpellationApproximate: interpellationSummary.approximate,
-    recentVotes,
+    recentVotes: [],
     partial,
     fallbackMessage: partial
       ? "Część danych statystycznych jest chwilowo niedostępna."

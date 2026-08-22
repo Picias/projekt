@@ -7,117 +7,129 @@ import {
   ChevronLeft,
   GraduationCap,
   MapPin,
-  Vote,
-  type LucideIcon,
 } from "lucide-react";
-import {
-  MpProfileStats,
-  MpProfileStatsSkeleton,
-} from "@/components/mp-profile-stats";
+import MpProfileDashboard from "@/components/mp-profile-dashboard";
+import MpProfilePhoto from "@/components/mp-profile-photo";
 import WatchMpButton from "@/components/watch-mp-button";
-import { getClubLabel, getClubTheme, type ClubTheme } from "@/lib/club-colors";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getClubLabel, getClubTheme } from "@/lib/club-colors";
+import { fetchMpProfileStats, fetchMpVotesFromRecentSittings } from "@/lib/mp-stats";
 import {
   calculateAge,
   formatAge,
   formatBirthDate,
-  formatLiczbaGlosow,
   formatOkreg,
-  resolvePoselName,
-  toPoselProfil,
 } from "@/lib/posel";
+import { fetchSejmMp, type SejmMpProfile } from "@/lib/sejm-mp";
+import { fetchInterpellationsList } from "@/lib/sejm-voting";
 
 type PoselPageProps = {
   params: Promise<{ id: string }>;
 };
 
-function ProfilePhoto({
-  name,
-  photoUrl,
-  frameClassName,
-}: {
-  name: string;
-  photoUrl: string | null;
-  frameClassName: string;
-}) {
-  const frame = `size-28 shrink-0 rounded-2xl border-2 ${frameClassName}`;
+export async function generateMetadata({ params }: PoselPageProps) {
+  const { id } = await params;
+  const poselId = Number(id);
 
-  if (photoUrl) {
-    return <img src={photoUrl} alt={name} className={`${frame} object-cover object-top`} />;
+  if (!Number.isInteger(poselId) || poselId <= 0) {
+    return { title: "Nie znaleziono posła — SEJM ON" };
   }
 
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const result = await fetchSejmMp(poselId);
 
+  if (result.status !== "ok") {
+    return { title: "Nie znaleziono posła — SEJM ON" };
+  }
+
+  return {
+    title: `${result.mp.firstLastName} — SEJM ON`,
+    description: `Profil posła ${result.mp.firstLastName} (${getClubLabel(result.mp.club)}), X kadencja Sejmu RP.`,
+  };
+}
+
+function HeroMeta({
+  icon: Icon,
+  children,
+}: {
+  icon: typeof Cake;
+  children: string;
+}) {
   return (
-    <span
-      className={`${frame} flex items-center justify-center bg-navy-700 text-2xl font-bold text-white`}
-    >
-      {initials}
-    </span>
+    <p className="flex items-center gap-2 text-xs text-white/60">
+      <Icon size={13} className="shrink-0 text-white/35" aria-hidden />
+      <span className="min-w-0 leading-snug">{children}</span>
+    </p>
   );
 }
 
-type InfoItem = {
-  icon: LucideIcon;
-  label: string;
-  value: string | null;
-  hint?: string | null;
-};
+function ProfileFetchError({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col gap-6 px-5 py-5">
+      <Link
+        href="/poslowie"
+        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
+      >
+        <ChevronLeft size={18} aria-hidden />
+        Wróć do listy
+      </Link>
+      <section className="rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-sm text-red-200">
+        <p className="font-semibold text-red-100">Nie udało się wczytać profilu</p>
+        <p className="mt-2">{message}</p>
+      </section>
+    </div>
+  );
+}
 
-function BasicInfo({ items, theme }: { items: InfoItem[]; theme: ClubTheme }) {
-  const hasAnyValue = items.some((item) => item.value);
+function AnalyticsSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Ładowanie aktywności posła">
+      <section>
+        <div className="mb-3 h-3 w-36 animate-pulse rounded bg-white/10" />
+        <div className="grid grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="h-28 animate-pulse rounded-2xl bg-white/10" />
+          ))}
+        </div>
+      </section>
+      <div className="h-11 animate-pulse rounded-2xl bg-white/10" />
+      <div className="flex flex-col gap-2">
+        {[1, 2, 3].map((item) => (
+          <div key={item} className="h-20 animate-pulse rounded-2xl bg-white/10" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function MpAnalytics({ mp }: { mp: SejmMpProfile }) {
+  const theme = getClubTheme(mp.club);
+  const [stats, interpellations, votes] = await Promise.all([
+    fetchMpProfileStats(mp.id),
+    fetchInterpellationsList(mp.id),
+    fetchMpVotesFromRecentSittings(mp.id),
+  ]);
+  const interpellationCount =
+    mp.numberOfInterpellations ??
+    interpellations.total ??
+    stats.interpellationCount ??
+    (interpellations.hasMore ? null : interpellations.items.length);
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-navy-800/60 p-5">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
-        Informacje podstawowe
-      </h2>
-
-      <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {items.map(({ icon: Icon, label, value, hint }) => (
-          <div
-            key={label}
-            className="flex items-start gap-3 rounded-xl bg-white/5 px-3 py-2.5"
-          >
-            <span
-              className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${theme.bg} ${theme.text}`}
-            >
-              <Icon size={16} aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-white/45">
-                {label}
-              </dt>
-              <dd
-                className={`text-sm font-semibold ${value ? "text-white" : "text-white/35"}`}
-              >
-                {value ?? "Brak danych"}
-              </dd>
-              {value && hint ? (
-                <p className="mt-0.5 text-[11px] text-white/40">{hint}</p>
-              ) : null}
-            </div>
-          </div>
-        ))}
-      </dl>
-
-      {!hasAnyValue ? (
-        <p className="mt-4 text-xs leading-relaxed text-white/45">
-          Dane profilowe pobiera{" "}
-          <Link href="/api/sync-mps" className="text-sejm-green-light hover:underline">
-            /api/sync-mps
-          </Link>{" "}
-          — jeśli po synchronizacji nadal są puste, uruchom migrację{" "}
-          <code className="text-white/60">supabase/schema.sql</code>.
-        </p>
-      ) : null}
-    </section>
+    <MpProfileDashboard
+      poselId={mp.id}
+      interpellationCount={interpellationCount}
+      interpellationsApproximate={
+        mp.numberOfInterpellations == null &&
+        interpellations.total == null &&
+        stats.interpellationApproximate
+      }
+      attendancePercent={stats.attendancePercent}
+      clubTheme={theme}
+      votes={votes}
+      votesSimulated={false}
+      interpellations={interpellations.items}
+      interpellationsHasMore={interpellations.hasMore}
+      email={mp.email}
+    />
   );
 }
 
@@ -125,45 +137,32 @@ export default async function PoselPage({ params }: PoselPageProps) {
   const { id } = await params;
   const poselId = Number(id);
 
-  if (!Number.isInteger(poselId)) {
+  if (!Number.isInteger(poselId) || poselId <= 0) {
     notFound();
   }
 
-  const { data } = await supabaseAdmin
-    .from("poslowie")
-    .select("*")
-    .eq("id", poselId)
-    .maybeSingle();
+  const result = await fetchSejmMp(poselId);
 
-  if (!data) {
+  if (result.status === "not_found") {
     notFound();
   }
 
-  const posel = toPoselProfil(data);
-  const { imie, nazwisko } = resolvePoselName(posel);
-  const theme = getClubTheme(posel.partia);
-  const wiek = calculateAge(posel.data_urodzenia);
+  if (result.status === "error") {
+    return <ProfileFetchError message={result.message} />;
+  }
 
-  const infoItems: InfoItem[] = [
-    {
-      icon: Cake,
-      label: "Wiek",
-      value: wiek === null ? null : formatAge(wiek),
-      hint: posel.data_urodzenia ? `ur. ${formatBirthDate(posel.data_urodzenia)}` : null,
-    },
-    { icon: GraduationCap, label: "Wykształcenie", value: posel.wyksztalcenie },
-    { icon: Briefcase, label: "Zawód", value: posel.zawod },
-    {
-      icon: MapPin,
-      label: "Okręg wyborczy",
-      value: formatOkreg(posel.okreg_wyborczy, posel.okreg_numer),
-    },
-    {
-      icon: Vote,
-      label: "Zdobyte głosy",
-      value: formatLiczbaGlosow(posel.liczba_glosow),
-    },
-  ];
+  const mp = result.mp;
+  const theme = getClubTheme(mp.club);
+  const wiek = calculateAge(mp.birthDate);
+  const okreg = formatOkreg(mp.districtName, mp.districtNum);
+  const clubChip = mp.club?.trim() || getClubLabel(mp.club);
+
+  const ageLine =
+    wiek !== null
+      ? `${formatAge(wiek)}${mp.birthDate ? ` · ur. ${formatBirthDate(mp.birthDate)}` : ""}`
+      : mp.birthDate
+        ? `ur. ${formatBirthDate(mp.birthDate)}`
+        : null;
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
@@ -176,38 +175,73 @@ export default async function PoselPage({ params }: PoselPageProps) {
       </Link>
 
       <section
-        className={`relative overflow-hidden rounded-2xl border bg-linear-to-br from-navy-800 via-navy-800/90 to-transparent p-5 ${theme.border} ${theme.bg}`}
+        className={`relative overflow-hidden rounded-3xl border bg-linear-to-br from-navy-800 via-navy-800/90 to-transparent p-5 ${theme.border}`}
       >
-        <WatchMpButton
-          poselId={poselId}
-          poselName={posel.imie_nazwisko}
-          className="absolute right-4 top-4"
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute -right-16 -top-16 size-48 rounded-full blur-3xl ${theme.bg}`}
         />
 
-        <div className="flex items-start gap-4 pr-12">
-          <ProfilePhoto
-            name={posel.imie_nazwisko}
-            photoUrl={posel.zdjecie_url}
-            frameClassName={theme.border}
+        <WatchMpButton
+          poselId={mp.id}
+          poselName={mp.firstLastName}
+          className="absolute right-4 top-4 z-10"
+        />
+
+        <div className="relative flex items-start gap-4 pr-12">
+          <MpProfilePhoto
+            name={mp.firstLastName}
+            photoUrl={mp.photoUrl}
+            frameClassName={`border-4 ${theme.border}`}
           />
+
           <div className="min-w-0 pt-1">
-            <p className="text-sm text-white/60">Poseł X kadencji</p>
-            <h1 className="mt-1 text-2xl font-bold leading-tight">{imie}</h1>
-            <p className="text-xl font-semibold text-white/90">{nazwisko}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
+              Poseł X kadencji
+              {mp.active ? null : " · mandat wygasł"}
+            </p>
+            <h1 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl">
+              {mp.lastName ? (
+                <>
+                  <span className="block text-lg font-medium text-white/80">
+                    {mp.firstName}
+                  </span>
+                  {mp.lastName}
+                </>
+              ) : (
+                mp.firstLastName
+              )}
+            </h1>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span
+                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${theme.text} ${theme.bg} ${theme.border}`}
+              >
+                {clubChip}
+              </span>
+              {okreg ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
+                  <MapPin size={12} aria-hidden />
+                  {okreg}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        <span
-          className={`mt-4 inline-block rounded-full border px-3 py-1 text-xs font-semibold ${theme.text} ${theme.bg} ${theme.border}`}
-        >
-          {getClubLabel(posel.partia)}
-        </span>
+        <div className="relative mt-5 flex flex-col gap-2 border-t border-white/10 pt-4">
+          {ageLine ? <HeroMeta icon={Cake}>{ageLine}</HeroMeta> : null}
+          {mp.profession ? (
+            <HeroMeta icon={Briefcase}>{mp.profession}</HeroMeta>
+          ) : null}
+          {mp.educationLevel ? (
+            <HeroMeta icon={GraduationCap}>{mp.educationLevel}</HeroMeta>
+          ) : null}
+        </div>
       </section>
 
-      <BasicInfo items={infoItems} theme={theme} />
-
-      <Suspense fallback={<MpProfileStatsSkeleton />}>
-        <MpProfileStats poselId={poselId} clubName={posel.partia} clubTheme={theme} />
+      <Suspense fallback={<AnalyticsSkeleton />}>
+        <MpAnalytics mp={mp} />
       </Suspense>
     </div>
   );

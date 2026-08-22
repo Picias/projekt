@@ -17,10 +17,34 @@ export type SejmFetchResult<T> = {
   failed: boolean;
 };
 
+export type SejmListFetchResult<T> = {
+  items: T[] | null;
+  total: number | null;
+  timedOut: boolean;
+  failed: boolean;
+};
+
 type FetchSejmOptions = {
   revalidate?: number;
   timeoutMs?: number;
 };
+
+function parseSejmCollectionTotal(headers: Headers): number | null {
+  const totalCount = Number.parseInt(headers.get("x-total-count") ?? "", 10);
+
+  if (Number.isFinite(totalCount) && totalCount >= 0) {
+    return totalCount;
+  }
+
+  const rangeMatch = /\/(\d+)\s*$/.exec(headers.get("content-range") ?? "");
+
+  if (!rangeMatch) {
+    return null;
+  }
+
+  const total = Number.parseInt(rangeMatch[1], 10);
+  return Number.isFinite(total) ? total : null;
+}
 
 export async function fetchSejmJson<T>(
   url: string,
@@ -65,6 +89,72 @@ export async function fetchSejmJsonSafe<T>(
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";
     return { data: null, timedOut, failed: true };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function fetchSejmJsonList<T>(
+  url: string,
+  options: FetchSejmOptions = {},
+): Promise<SejmListFetchResult<T>> {
+  const timeoutMs = options.timeoutMs ?? SEJM_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: options.revalidate ?? 3600 },
+      signal: controller.signal,
+    });
+
+    const total = parseSejmCollectionTotal(response.headers);
+
+    if (!response.ok) {
+      return { items: null, total, timedOut: false, failed: true };
+    }
+
+    const data = (await response.json()) as unknown;
+    const items = Array.isArray(data) ? (data as T[]) : null;
+
+    return {
+      items,
+      total,
+      timedOut: false,
+      failed: items == null,
+    };
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "AbortError";
+    return { items: null, total: null, timedOut, failed: true };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function fetchSejmText(
+  url: string,
+  options: FetchSejmOptions = {},
+): Promise<string | null> {
+  const timeoutMs = options.timeoutMs ?? SEJM_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "text/html; charset=UTF-8, text/plain;q=0.9" },
+      next: { revalidate: options.revalidate ?? 3600 },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const text = await response.text();
+    return text.trim() ? text : null;
+  } catch {
+    return null;
   } finally {
     clearTimeout(timeoutId);
   }

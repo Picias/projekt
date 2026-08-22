@@ -31,3 +31,102 @@
     text-rendering: optimizeLegibility;
   }
 }
+
+@layer components {
+  .sejm-html {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    color: rgb(255 255 255 / 0.8);
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+
+  .sejm-html :where(*) {
+    max-width: 100%;
+  }
+
+  .sejm-html :where(h1, h2, h3, h4) {
+    color: white;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 0.9em 0 0.45em;
+  }
+
+  .sejm-html :where(h1) {
+    font-size: 1.125rem;
+    margin-top: 0;
+  }
+
+  .sejm-html :where(h2) {
+    font-size: 1rem;
+  }
+
+  .sejm-html :where(h3, h4) {
+    font-size: 0.95rem;
+  }
+
+  .sejm-html :where(p) {
+    margin: 0.7em 0;
+  }
+
+  .sejm-html :where(ul, ol) {
+    margin: 0.7em 0;
+    padding-left: 1.25rem;
+  }
+
+  .sejm-html :where(li) {
+    margin: 0.35em 0;
+  }
+
+  .sejm-html :where(a) {
+    color: var(--color-sejm-green-light);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .sejm-html :where(strong, b) {
+    color: white;
+    font-weight: 650;
+  }
+
+  .sejm-html :where(em, i) {
+    font-style: italic;
+  }
+
+  .sejm-html :where(table) {
+    display: block;
+    width: 100%;
+    margin: 0.85em 0;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+
+  .sejm-html :where(th, td) {
+    border: 1px solid rgb(255 255 255 / 0.12);
+    padding: 0.4rem 0.55rem;
+    text-align: left;
+  }
+
+  .sejm-html :where(img) {
+    height: auto;
+  }
+
+  .sejm-html :where(pre, code) {
+    white-space: pre-wrap;
+  }
+
+  .sejm-html :where(.int-recipient, .intAuthor, .intDate, .intDateTresc) {
+    color: rgb(255 255 255 / 0.5);
+    font-size: 0.8rem;
+  }
+
+  .sejm-html :where(.int-title) {
+    color: white;
+    font-weight: 600;
+  }
+
+  .sejm-html :where(.attachments-list a) {
+    display: inline-block;
+    margin-top: 0.15rem;
+  }
+}
