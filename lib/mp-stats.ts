@@ -44,15 +44,30 @@ export type MpProfileStats = {
 
 export const SEJM_RECENT_SITTINGS_LIMIT = 5;
 
-const FORMAL_VOTE_PATTERN =
-  /przerwę|przerwe|przerwa|odroczenie|wniosek formalny|zamknięcie posiedzenia/i;
+const JUNK_VOTE_PHRASES = [
+  "kworum",
+  "proceduralne",
+  "skrocenie terminu",
+  "wniosek formalny",
+  "odroczenie",
+  "zamkniecie posiedzenia",
+  "uzupelnienie porzadku",
+  "przerwa",
+  "przerwe",
+];
 
-export function isFormalVote(vote: MpVote): boolean {
-  const haystack = [vote.title, vote.topic, vote.description]
-    .filter(Boolean)
-    .join(" ");
+function foldPl(value: string): string {
+  return value
+    .toLocaleLowerCase("pl")
+    .replace(/ł/g, "l")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
 
-  return FORMAL_VOTE_PATTERN.test(haystack);
+export function isFormalVote(vote: Pick<MpVote, "title" | "topic">): boolean {
+  const haystack = foldPl([vote.title, vote.topic].filter(Boolean).join(" "));
+
+  return JUNK_VOTE_PHRASES.some((phrase) => haystack.includes(phrase));
 }
 
 export function calculateAttendance(stats: VotingStat[]): {
@@ -162,7 +177,9 @@ export async function fetchRecentVotes(
     }
 
     const votes = await fetchMpVotesForSitting(mpId, day.sitting, day.date);
-    const visibleVotes = votes.filter((vote) => vote.vote !== "PRESENT");
+    const visibleVotes = votes.filter(
+      (vote) => vote.vote !== "PRESENT" && !isFormalVote(vote),
+    );
 
     for (let index = visibleVotes.length - 1; index >= 0; index -= 1) {
       if (collected.length >= limit) {

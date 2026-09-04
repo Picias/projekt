@@ -6,12 +6,13 @@ import type Hls from "hls.js";
 type SejmHlsPlayerProps = {
   src: string;
   title?: string;
+  className?: string;
   onError?: () => void;
 };
 
 const PLAYBACK_TIMEOUT_MS = 12_000;
 
-export default function SejmHlsPlayer({ src, title, onError }: SejmHlsPlayerProps) {
+export default function SejmHlsPlayer({ src, title, className, onError }: SejmHlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
@@ -106,7 +107,10 @@ export default function SejmHlsPlayer({ src, title, onError }: SejmHlsPlayerProp
       playsInline
       preload="auto"
       title={title ?? "Retransmisja wystąpienia z Sejmu"}
-      className="aspect-video w-full rounded-xl border-0 bg-black overflow-hidden"
+      className={
+        className ??
+        "aspect-video w-full overflow-hidden rounded-xl border-0 bg-black"
+      }
     />
   );
 }

@@ -12,7 +12,11 @@ import MpProfileDashboard from "@/components/mp-profile-dashboard";
 import MpProfilePhoto from "@/components/mp-profile-photo";
 import WatchMpButton from "@/components/watch-mp-button";
 import { getClubLabel, getClubTheme } from "@/lib/club-colors";
-import { fetchMpProfileStats, fetchMpVotesFromRecentSittings } from "@/lib/mp-stats";
+import {
+  fetchMpProfileStats,
+  fetchMpVotesFromRecentSittings,
+  isFormalVote,
+} from "@/lib/mp-stats";
 import {
   calculateAge,
   formatAge,
@@ -107,6 +111,8 @@ async function MpAnalytics({ mp }: { mp: SejmMpProfile }) {
     fetchInterpellationsList(mp.id),
     fetchMpVotesFromRecentSittings(mp.id),
   ]);
+  // Drugi przesiew na wszelki wypadek: kworum, wnioski formalne, proceduralne.
+  const substantiveVotes = votes.filter((vote) => !isFormalVote(vote));
   const interpellationCount =
     mp.numberOfInterpellations ??
     interpellations.total ??
@@ -124,7 +130,7 @@ async function MpAnalytics({ mp }: { mp: SejmMpProfile }) {
       }
       attendancePercent={stats.attendancePercent}
       clubTheme={theme}
-      votes={votes}
+      votes={substantiveVotes}
       votesSimulated={false}
       interpellations={interpellations.items}
       interpellationsHasMore={interpellations.hasMore}

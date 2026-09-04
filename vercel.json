@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/smart-sync",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-ustawy",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

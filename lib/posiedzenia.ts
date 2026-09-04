@@ -21,15 +21,13 @@ const dayMonthFormatter = new Intl.DateTimeFormat("pl-PL", {
   month: "long",
 });
 
-// Kolumny DATE i daty z API Sejmu są bez strefy czasowej, więc wszędzie
-// operujemy na łańcuchach "YYYY-MM-DD". Porównywanie ich przez new Date()
-// zeszłoby na UTC i w Polsce potrafiłoby przesunąć posiedzenie o dzień.
+// Daty posiedzeń z API Sejmu są kalendarzowe (bez strefy). Na Vercel zegar
+// serwera jest w UTC, więc bierzemy dzień według Warszawy — inaczej rano
+// w Polsce cron widziałby jeszcze wczoraj.
 export function todayIso(): string {
-  const now = new Date();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getDate()}`.padStart(2, "0");
-
-  return `${now.getFullYear()}-${month}-${day}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Warsaw",
+  }).format(new Date());
 }
 
 function toUtcTime(date: string): number {

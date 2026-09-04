@@ -245,26 +245,24 @@ export async function syncVotings(
     zapisanychGlosow: 0,
   };
 
-  const allSittings = await fetchSittingNumbers();
+  // Smart CRON podaje numer bieżącego posiedzenia z /proceedings/current,
+  // zanim pojawią się pierwsze głosowania — wtedy listy /votings jeszcze nie ma.
+  let sittings: number[];
 
-  if (allSittings.length === 0) {
-    return {
-      ...emptyResult,
-      status: "error",
-      message: "API Sejmu nie zwróciło listy posiedzeń z głosowaniami",
-    };
-  }
+  if (options.sitting) {
+    sittings = [options.sitting];
+  } else {
+    const allSittings = await fetchSittingNumbers();
 
-  const sittings = options.sitting
-    ? allSittings.filter((numer) => numer === options.sitting)
-    : allSittings.slice(0, options.sittings ?? DEFAULT_SITTINGS);
+    if (allSittings.length === 0) {
+      return {
+        ...emptyResult,
+        status: "error",
+        message: "API Sejmu nie zwróciło listy posiedzeń z głosowaniami",
+      };
+    }
 
-  if (sittings.length === 0) {
-    return {
-      ...emptyResult,
-      status: "error",
-      message: `Posiedzenie ${options.sitting} nie ma głosowań w API Sejmu`,
-    };
+    sittings = allSittings.slice(0, options.sittings ?? DEFAULT_SITTINGS);
   }
 
   const [drukIndex, knownPoselIds] = await Promise.all([
