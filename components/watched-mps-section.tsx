@@ -36,7 +36,7 @@ function WatchedMpsEmpty() {
             <Link href="/poslowie" className="font-medium text-sejm-green-light hover:underline">
               Posłowie
             </Link>{" "}
-            i kliknij serduszko przy profilu, który chcesz śledzić.
+            i kliknij dzwonek przy profilu, który chcesz śledzić.
           </p>
         </div>
       </div>

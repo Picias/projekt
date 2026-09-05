@@ -87,13 +87,6 @@ export default function WiecejView({ isAdmin }: { isAdmin: boolean }) {
       </section>
 
       {isAdmin ? <AdminSyncUstawy /> : null}
-
-      <div className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
-        <p className="text-sm leading-relaxed text-white/70">
-          Słowniczek pojęć sejmowych, powiadomienia i informacje o aplikacji pojawią
-          się w kolejnych odsłonach.
-        </p>
-      </div>
     </div>
   );
 }

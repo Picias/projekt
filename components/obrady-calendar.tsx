@@ -148,7 +148,7 @@ export default function ObradyCalendar({
 
   return (
     <section className="flex flex-col gap-6">
-      <div>
+      <div className="rounded-2xl border border-white/15 bg-white/[0.03] p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <button
             type="button"

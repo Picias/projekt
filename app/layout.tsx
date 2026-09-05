@@ -9,17 +9,32 @@ const inter = Inter({
   display: "swap",
 });
 
+// PWA: wygeneruj i wrzuć do folderu `public` pliki icon-192x192.png oraz icon-512x512.png.
 export const metadata: Metadata = {
   title: "SEJM ON — Włącz się w decyzje",
   description:
     "Obywatelska aplikacja do śledzenia ustaw, obrad i głosowań w Sejmie RP.",
-  applicationName: "SEJM ON",
+  applicationName: "SejmON",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SejmON",
+  },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
+  icons: {
+    apple: "/icon-192x192.png",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0B1B3D",
+  themeColor: "#0B132B",
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 

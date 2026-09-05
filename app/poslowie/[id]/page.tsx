@@ -194,7 +194,7 @@ export default async function PoselPage({ params }: PoselPageProps) {
           className="absolute right-4 top-4 z-10"
         />
 
-        <div className="relative flex items-start gap-4 pr-12">
+        <div className="relative flex items-start gap-4 pr-28">
           <MpProfilePhoto
             name={mp.firstLastName}
             photoUrl={mp.photoUrl}

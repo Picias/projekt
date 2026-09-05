@@ -513,3 +513,39 @@ CREATE POLICY "avatars_delete_own"
     bucket_id = 'avatars'
     AND name LIKE auth.uid()::text || '-%'
   );
+
+-- Subskrypcje posłów i ustaw. Szczegóły i migracja ze starych tabel:
+-- supabase/subscriptions.sql
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('posel', 'ustawa')),
+  target_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, target_type, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_created
+  ON subscriptions (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_target
+  ON subscriptions (target_type, target_id);
+
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "subscriptions_select_own" ON subscriptions;
+CREATE POLICY "subscriptions_select_own"
+  ON subscriptions FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "subscriptions_insert_own" ON subscriptions;
+CREATE POLICY "subscriptions_insert_own"
+  ON subscriptions FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "subscriptions_delete_own" ON subscriptions;
+CREATE POLICY "subscriptions_delete_own"
+  ON subscriptions FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+
+GRANT SELECT, INSERT, DELETE ON TABLE subscriptions TO authenticated;

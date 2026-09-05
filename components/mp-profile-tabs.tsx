@@ -4,14 +4,18 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
+  FileX,
   Mail,
-  Mic,
+  MicOff,
   Minus,
   Play,
+  SearchX,
   ThumbsDown,
   ThumbsUp,
   UserX,
+  Vote,
 } from "lucide-react";
+import EmptyState from "@/components/EmptyState";
 import type { ClubTheme } from "@/lib/club-colors";
 import { formatVoteDate, formatVoteLabel, type MpVote } from "@/lib/mp-stats";
 import { speechWatchHref, type ScrapedSpeech } from "@/lib/sejm-speech-types";
@@ -147,9 +151,11 @@ function VotesPanel({
 
   if (votes.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-white/60">
-        Brak głosowań do wyświetlenia dla tego posła.
-      </div>
+      <EmptyState
+        icon={Vote}
+        title="Brak głosowań"
+        description="Ten poseł nie ma jeszcze zarejestrowanych głosowań w tej kadencji."
+      />
     );
   }
 
@@ -199,9 +205,11 @@ function VotesPanel({
       </div>
 
       {filteredVotes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-white/60">
-          Brak głosowań pasujących do wybranych filtrów.
-        </div>
+        <EmptyState
+          icon={SearchX}
+          title="Brak wyników"
+          description="Żadne głosowanie nie pasuje do wybranych filtrów."
+        />
       ) : (
         <ul className="flex flex-col gap-2">
           {filteredVotes.map((vote) => {
@@ -294,14 +302,11 @@ function SpeechesPanel({
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center rounded-3xl border border-dashed border-white/15 bg-white/5 px-5 py-8 text-center">
-        <span className="flex size-14 items-center justify-center rounded-full bg-white/10 text-white/50">
-          <Mic size={24} aria-hidden />
-        </span>
-        <p className="mt-3 text-sm text-white/60">
-          Serwis Sejmu nie zwraca wystąpień tego posła.
-        </p>
-      </div>
+      <EmptyState
+        icon={MicOff}
+        title="Brak wystąpień"
+        description="Poseł nie przemawiał jeszcze z trybuny sejmowej w tej kadencji."
+      />
     );
   }
 
@@ -356,9 +361,11 @@ function InterpellationsPanel({
 }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-white/60">
-        Brak interpelacji tego posła w API Sejmu.
-      </div>
+      <EmptyState
+        icon={FileX}
+        title="Brak interpelacji"
+        description="Ten poseł nie złożył jeszcze żadnej interpelacji."
+      />
     );
   }
 

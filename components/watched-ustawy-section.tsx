@@ -28,7 +28,7 @@ export default function WatchedUstawySection() {
       ) : (
         <p className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-4 text-sm leading-relaxed text-white/55">
           Nie śledzisz jeszcze żadnej ustawy. Otwórz dowolny druk poniżej i kliknij
-          „Śledź / Obserwuj”, aby dodać go tutaj.
+          dzwonek „Obserwuj”, aby dodać go tutaj.
         </p>
       )}
     </section>
