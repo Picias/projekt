@@ -23,7 +23,7 @@ import {
 import { formatLiczba } from "@/lib/ustawa";
 
 type GlosObywateliProps = {
-  ustawaId: number;
+  printNum: string;
 };
 
 type Opcja = {
@@ -86,12 +86,12 @@ function SectionShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
+export default function GlosObywateli({ printNum }: GlosObywateliProps) {
   const router = useRouter();
   const pathname = usePathname();
   const user = useAuthUser();
   const [wyniki, setWyniki] = useState<WynikiSondy>(PUSTE_WYNIKI);
-  const [mojGlos, setMojGlos] = useState<TypGlosu | null>(null);
+  const [userVote, setUserVote] = useState<TypGlosu | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<TypGlosu | null>(null);
   const [blad, setBlad] = useState(false);
@@ -101,7 +101,10 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
 
     async function loadSonda() {
       try {
-        const response = await fetch(`/api/glosy-obywateli?ustawa_id=${ustawaId}`);
+        const response = await fetch(
+          `/api/citizen-votes?print_num=${encodeURIComponent(printNum)}`,
+          { cache: "no-store" },
+        );
 
         if (!response.ok) {
           return;
@@ -109,15 +112,15 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
 
         const data = (await response.json()) as {
           wyniki?: WynikiSondy;
-          moj_glos?: TypGlosu | null;
+          userVote?: TypGlosu | null;
         };
 
         if (!cancelled) {
           setWyniki(data.wyniki ?? PUSTE_WYNIKI);
-          setMojGlos(data.moj_glos ?? null);
+          setUserVote(data.userVote ?? null);
         }
       } catch {
-        // Nieudany odczyt zostawia sondę w stanie „jeszcze nie głosowałeś”.
+        // Nieudany odczyt zostawia sondę bez głosów — paski na 0%.
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -125,15 +128,15 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
       }
     }
 
-    loadSonda();
+    void loadSonda();
 
     return () => {
       cancelled = true;
     };
-  }, [ustawaId, user?.id]);
+  }, [printNum, user?.id]);
 
   async function handleVote(typ: TypGlosu) {
-    if (pending || typ === mojGlos || user === undefined) {
+    if (pending || typ === userVote || user === undefined) {
       return;
     }
 
@@ -146,12 +149,13 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
     setBlad(false);
 
     try {
-      const response = await fetch("/api/glosy-obywateli", {
+      const response = await fetch("/api/citizen-votes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify({
-          ustawa_id: ustawaId,
-          typ_glosu: typ,
+          print_num: printNum,
+          vote_type: typ,
         }),
       });
 
@@ -167,11 +171,11 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
 
       const data = (await response.json()) as {
         wyniki?: WynikiSondy;
-        moj_glos?: TypGlosu | null;
+        userVote?: TypGlosu | null;
       };
 
       setWyniki(data.wyniki ?? PUSTE_WYNIKI);
-      setMojGlos(data.moj_glos ?? typ);
+      setUserVote(data.userVote ?? typ);
     } catch {
       setBlad(true);
     } finally {
@@ -204,7 +208,7 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
         <div className="mt-4 grid grid-cols-3 gap-2.5">
           {OPCJE.map((opcja) => {
             const Icon = opcja.icon;
-            const wybrany = mojGlos === opcja.typ;
+            const wybrany = userVote === opcja.typ;
             const ladowanie = pending === opcja.typ;
 
             return (
@@ -240,41 +244,42 @@ export default function GlosObywateli({ ustawaId }: GlosObywateliProps) {
           </p>
         ) : null}
 
-        {mojGlos ? (
-          <div className="mt-5 flex flex-col gap-3" aria-live="polite">
-            {OPCJE.map((opcja) => (
-              <div key={opcja.typ}>
-                <div className="flex items-baseline justify-between gap-3 text-xs">
-                  <span className={`font-semibold ${opcja.tekst}`}>{opcja.label}</span>
-                  <span className="font-medium text-white/45">
-                    <span className="font-bold text-white/80">{procenty[opcja.typ]}%</span>{" "}
-                    · {formatLiczba(wyniki[opcja.typ])}
-                  </span>
-                </div>
-                <div
-                  className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/10"
-                  role="img"
-                  aria-label={`${opcja.label}: ${procenty[opcja.typ]} procent`}
-                >
-                  <div
-                    className={`h-full rounded-full transition-[width] duration-500 ${opcja.pasek}`}
-                    style={{ width: `${procenty[opcja.typ]}%` }}
-                  />
-                </div>
+        <div className="mt-5 flex flex-col gap-3" aria-live="polite">
+          {OPCJE.map((opcja) => (
+            <div key={opcja.typ}>
+              <div className="flex items-baseline justify-between gap-3 text-xs">
+                <span className={`font-semibold ${opcja.tekst}`}>{opcja.label}</span>
+                <span className="font-medium text-white/45">
+                  <span className="font-bold text-white/80">{procenty[opcja.typ]}%</span>{" "}
+                  · {formatLiczba(wyniki[opcja.typ])}
+                </span>
               </div>
-            ))}
+              <div
+                className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/10"
+                role="img"
+                aria-label={`${opcja.label}: ${procenty[opcja.typ]} procent`}
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${opcja.pasek}`}
+                  style={{ width: `${procenty[opcja.typ]}%` }}
+                />
+              </div>
+            </div>
+          ))}
 
-            <p className="mt-1 text-[11px] leading-relaxed text-white/40">
-              Zagłosowało {formatLiczba(razem)} osób. Możesz zmienić zdanie — wybierz inną
-              odpowiedź, a Twój głos się zaktualizuje.
+          {razem === 0 ? (
+            <p className="mt-1 text-center text-[11px] leading-relaxed text-white/40">
+              Bądź pierwszym, który odda głos!
             </p>
-          </div>
-        ) : (
-          <p className="mt-5 rounded-2xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-center text-xs leading-relaxed text-white/50">
-            Oddaj głos, aby zobaczyć, jak zagłosowało pozostałe{" "}
-            <span className="font-semibold text-white/70">{formatLiczba(razem)}</span> osób.
-          </p>
-        )}
+          ) : (
+            <p className="mt-1 text-[11px] leading-relaxed text-white/40">
+              Zagłosowało {formatLiczba(razem)} osób.
+              {userVote
+                ? " Możesz zmienić zdanie — wybierz inną odpowiedź, a Twój głos się zaktualizuje."
+                : ""}
+            </p>
+          )}
+        </div>
       </article>
     </SectionShell>
   );

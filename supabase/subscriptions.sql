@@ -24,19 +24,26 @@ ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "subscriptions_select_own" ON subscriptions;
 CREATE POLICY "subscriptions_select_own"
   ON subscriptions FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "subscriptions_insert_own" ON subscriptions;
 CREATE POLICY "subscriptions_insert_own"
   ON subscriptions FOR INSERT TO authenticated
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "subscriptions_update_own" ON subscriptions;
+CREATE POLICY "subscriptions_update_own"
+  ON subscriptions FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "subscriptions_delete_own" ON subscriptions;
 CREATE POLICY "subscriptions_delete_own"
   ON subscriptions FOR DELETE TO authenticated
-  USING (user_id = auth.uid());
+  USING (auth.uid() = user_id);
 
-GRANT SELECT, INSERT, DELETE ON TABLE subscriptions TO authenticated;
+REVOKE ALL ON TABLE subscriptions FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE subscriptions TO authenticated;
 
 -- Przeniesienie dotychczasowych obserwacji, o ile stare tabele istnieją
 -- i user_id da się odczytać jako UUID konta.

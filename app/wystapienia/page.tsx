@@ -3,16 +3,8 @@ import BackButton from "@/components/back-button";
 import SpeechViewer from "@/components/speech-viewer";
 
 type WystapieniePageProps = {
-  searchParams: Promise<{ path?: string; from?: string }>;
+  searchParams: Promise<{ path?: string }>;
 };
-
-function safeInternalPath(value: string | undefined): string | undefined {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
-    return undefined;
-  }
-
-  return value;
-}
 
 export const metadata: Metadata = {
   title: "Wystąpienie — SEJM ON",
@@ -20,14 +12,13 @@ export const metadata: Metadata = {
 };
 
 export default async function WystapieniePage({ searchParams }: WystapieniePageProps) {
-  const { path: rawPath, from: fromRaw } = await searchParams;
+  const { path: rawPath } = await searchParams;
   const path = rawPath?.trim() ?? "";
-  const from = safeInternalPath(fromRaw);
 
   if (!path) {
     return (
       <div className="flex flex-col gap-6 px-5 py-5">
-        <BackButton href={from ?? "/poslowie"} label="Wróć do profilu" />
+        <BackButton />
         <section className="rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-sm text-red-200">
           <p className="font-semibold text-red-100">Brak wystąpienia</p>
           <p className="mt-2">Nie przekazano ścieżki wystąpienia ze strony Sejmu.</p>
@@ -38,10 +29,7 @@ export default async function WystapieniePage({ searchParams }: WystapieniePageP
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <BackButton
-        href={from ?? "/poslowie"}
-        label={from?.startsWith("/poslowie/") ? "Wróć do profilu" : "Wróć"}
-      />
+      <BackButton />
       <SpeechViewer path={path} />
     </div>
   );

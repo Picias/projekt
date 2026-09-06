@@ -61,7 +61,7 @@ type UstawaMetadataRow = {
   tytul_oficjalny: string;
   autor: string | null;
   data_wplywu: string | null;
-  etap_legislacyjny: StageKey;
+  etap_legislacyjny: string;
   pdf_url: string | null;
   zaktualizowano_at: string;
 };
@@ -155,17 +155,15 @@ const STAGE_ORDER: StageKey[] = [
 
 /**
  * Etap wyznaczamy z realnego procesu legislacyjnego: bierzemy najdalej
- * zaawansowany etap, jaki pojawił się w historii druku.
+ * zaawansowany etap, jaki pojawił się w historii druku. Weto zapisujemy
+ * osobno (zamiast spłaszczać je do "prezydent"), żeby filtr "Zawetowane"
+ * mógł szukać słowa "weto" w kolumnie etap_legislacyjny.
  */
-async function resolveEtapLegislacyjny(process: SejmProcessHeader): Promise<StageKey> {
-  // Adres publikacji w Dzienniku Ustaw kończy proces, a flaga passed oznacza
-  // uchwalenie — obie informacje są już w nagłówku, więc oszczędzają zapytanie.
+async function resolveEtapLegislacyjny(process: SejmProcessHeader): Promise<string> {
+  // Adres publikacji w Dzienniku Ustaw kończy proces — tę informację mamy
+  // już w nagłówku, więc oszczędza zapytanie o szczegóły.
   if (process.displayAddress) {
     return "opublikowana";
-  }
-
-  if (process.passed) {
-    return "prezydent";
   }
 
   const details = await fetchSejmJson<SejmProcessDetails>(
@@ -174,25 +172,37 @@ async function resolveEtapLegislacyjny(process: SejmProcessHeader): Promise<Stag
   );
 
   if (!details) {
-    return "projekt";
+    return process.passed ? "prezydent" : "projekt";
   }
 
   if (details.displayAddress) {
     return "opublikowana";
   }
 
-  if (details.passed) {
-    return "prezydent";
-  }
-
   let furthest = 0;
+  let furthestName = "";
 
   for (const name of collectStageNames(details.stages)) {
     const index = STAGE_ORDER.indexOf(resolveStageKey(name));
 
-    if (index > furthest) {
+    // Przy tym samym stopniu (np. dwa etapy u Prezydenta) bierzemy późniejszy
+    // opis — "Weto Prezydenta" ma wtedy pierwszeństwo przed samym przekazaniem.
+    if (index >= furthest) {
       furthest = index;
+      furthestName = name;
     }
+  }
+
+  if (furthestName.toLowerCase().includes("weto")) {
+    return furthestName;
+  }
+
+  const prezydentIndex = STAGE_ORDER.indexOf("prezydent");
+
+  // Flaga passed oznacza uchwalenie — bez weta to czekanie na prezydenta,
+  // nawet gdy lista etapów z API nie doszła jeszcze do tego stopnia.
+  if ((process.passed || details.passed) && furthest < prezydentIndex) {
+    return "prezydent";
   }
 
   return STAGE_ORDER[furthest];

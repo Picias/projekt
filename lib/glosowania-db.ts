@@ -122,3 +122,31 @@ export async function fetchGlosyObserwowanych(
 
   return mapa;
 }
+
+export async function fetchSittingNumbers(): Promise<number[]> {
+  const { data, error } = await supabaseAdmin
+    .from("glosowania")
+    .select("sitting")
+    .order("sitting", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const fromVotings = [
+    ...new Set((data ?? []).map((row) => Number((row as { sitting: number }).sitting))),
+  ].filter((sitting) => sitting > 0);
+
+  if (fromVotings.length > 0) {
+    return fromVotings;
+  }
+
+  const { data: posiedzenia } = await supabaseAdmin
+    .from("posiedzenia")
+    .select("numer")
+    .order("numer", { ascending: false });
+
+  return [
+    ...new Set((posiedzenia ?? []).map((row) => Number((row as { numer: number }).numer))),
+  ].filter((sitting) => sitting > 0);
+}

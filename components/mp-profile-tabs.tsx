@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronRight,
   FileX,
   Mail,
@@ -33,6 +34,7 @@ type GlosFilter = "" | "ZA" | "PRZECIW" | "WSTRZYMAŁ SIĘ" | "NIEOBECNY";
 type MpProfileTabsProps = {
   poselId: number;
   votes: MpVote[];
+  sittings?: number[];
   votesSimulated: boolean;
   speeches: ScrapedSpeech[] | null;
   speechesError: string | null;
@@ -62,6 +64,95 @@ const GLOS_FILTERS: { value: GlosFilter; label: string }[] = [
 
 const selectClassName =
   "w-full rounded-xl border border-white/10 bg-navy-800 px-3 py-2.5 text-sm text-white outline-none transition-colors [color-scheme:dark] focus:border-white/25";
+
+const sittingListClassName =
+  "absolute z-20 mt-1 max-h-60 w-full overflow-x-hidden overflow-y-auto rounded-xl border border-white/10 bg-navy-800 py-1 shadow-lg shadow-navy-950/40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-700 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600";
+
+function SittingSelect({
+  sittings,
+  value,
+  onChange,
+}: {
+  sittings: number[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const label = value ? `Nr ${value}` : "Wszystkie";
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={`${selectClassName} flex items-center justify-between gap-2 text-left`}
+      >
+        <span>{label}</span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-white/45 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <ul role="listbox" className={sittingListClassName}>
+          <li>
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-left text-sm ${
+                !value ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/8"
+              }`}
+            >
+              Wszystkie
+            </button>
+          </li>
+          {sittings.map((sitting) => {
+            const selected = value === String(sitting);
+
+            return (
+              <li key={sitting}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    onChange(String(sitting));
+                    setOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm ${
+                    selected ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/8"
+                  }`}
+                >
+                  Nr {sitting}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 function VoteIcon({ vote }: { vote: string }) {
   if (vote === "YES") {
@@ -120,10 +211,12 @@ function voteFilterKey(vote: string): GlosFilter {
 
 function VotesPanel({
   votes,
+  sittings: sittingsProp,
   simulated,
   poselId,
 }: {
   votes: MpVote[];
+  sittings?: number[];
   simulated: boolean;
   poselId: number;
 }) {
@@ -131,9 +224,9 @@ function VotesPanel({
   const [filtrGlosu, setFiltrGlosu] = useState<GlosFilter>("");
 
   const sittings = useMemo(() => {
-    const unique = [...new Set(votes.map((vote) => vote.sitting).filter(Boolean))];
-    return unique.sort((a, b) => b - a);
-  }, [votes]);
+    const fromVotes = votes.map((vote) => vote.sitting).filter(Boolean);
+    return [...new Set([...(sittingsProp ?? []), ...fromVotes])].sort((a, b) => b - a);
+  }, [votes, sittingsProp]);
 
   const filteredVotes = useMemo(() => {
     return votes.filter((vote) => {
@@ -172,18 +265,11 @@ function VotesPanel({
           <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
             Posiedzenie
           </span>
-          <select
+          <SittingSelect
+            sittings={sittings}
             value={filtrPosiedzenia}
-            onChange={(event) => setFiltrPosiedzenia(event.target.value)}
-            className={selectClassName}
-          >
-            <option value="">Wszystkie</option>
-            {sittings.map((sitting) => (
-              <option key={sitting} value={sitting}>
-                Nr {sitting}
-              </option>
-            ))}
-          </select>
+            onChange={setFiltrPosiedzenia}
+          />
         </label>
 
         <label className="flex flex-col gap-1.5">
@@ -444,6 +530,7 @@ function ContactPanel({ email }: { email: string | null }) {
 export default function MpProfileTabs({
   poselId,
   votes,
+  sittings,
   votesSimulated,
   speeches,
   speechesError,
@@ -493,7 +580,12 @@ export default function MpProfileTabs({
         className="mt-4"
       >
         {activeTab === "votes" ? (
-          <VotesPanel votes={votes} simulated={votesSimulated} poselId={poselId} />
+          <VotesPanel
+            votes={votes}
+            sittings={sittings}
+            simulated={votesSimulated}
+            poselId={poselId}
+          />
         ) : null}
         {activeTab === "speeches" ? (
           <SpeechesPanel

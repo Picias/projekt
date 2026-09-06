@@ -435,31 +435,29 @@ DROP POLICY IF EXISTS "glosy_obywateli_insert_anon" ON glosy_obywateli;
 DROP POLICY IF EXISTS "glosy_obywateli_update_anon" ON glosy_obywateli;
 DROP POLICY IF EXISTS "glosy_obywateli_delete_anon" ON glosy_obywateli;
 
--- Profile: każdy może czytać publiczne karty obywateli, ale zapis tylko
--- właścicielowi. Ukrywanie pól (pokaz_*) egzekwuje warstwa aplikacji —
--- Postgres nie chowa pojedynczych kolumn per wiersz.
+-- Profile: dane demograficzne tylko dla właściciela (auth.uid() = id).
+-- Trigger handle_new_user_profile jest SECURITY DEFINER, więc omija RLS.
 DROP POLICY IF EXISTS "profile_select_public" ON profile;
-CREATE POLICY "profile_select_public"
-  ON profile FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "profile_select_own" ON profile;
+CREATE POLICY "profile_select_own"
+  ON profile FOR SELECT TO authenticated
+  USING (auth.uid() = id);
 
 DROP POLICY IF EXISTS "profile_insert_own" ON profile;
 CREATE POLICY "profile_insert_own"
   ON profile FOR INSERT TO authenticated
-  WITH CHECK (id = auth.uid());
+  WITH CHECK (auth.uid() = id);
 
 DROP POLICY IF EXISTS "profile_update_own" ON profile;
 CREATE POLICY "profile_update_own"
   ON profile FOR UPDATE TO authenticated
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
 
 DROP POLICY IF EXISTS "profile_delete_own" ON profile;
-CREATE POLICY "profile_delete_own"
-  ON profile FOR DELETE TO authenticated
-  USING (id = auth.uid());
 
-GRANT SELECT ON TABLE profile TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON TABLE profile TO authenticated;
+REVOKE ALL ON TABLE profile FROM anon;
+GRANT SELECT, INSERT, UPDATE ON TABLE profile TO authenticated;
 
 -- Bucket na awatary obywateli. Publiczny odczyt, bo avatar_url trafia
 -- na karty profilu; zapis tylko własnych plików nazwy {userId}-{timestamp}.*
@@ -536,16 +534,69 @@ ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "subscriptions_select_own" ON subscriptions;
 CREATE POLICY "subscriptions_select_own"
   ON subscriptions FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "subscriptions_insert_own" ON subscriptions;
 CREATE POLICY "subscriptions_insert_own"
   ON subscriptions FOR INSERT TO authenticated
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "subscriptions_update_own" ON subscriptions;
+CREATE POLICY "subscriptions_update_own"
+  ON subscriptions FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "subscriptions_delete_own" ON subscriptions;
 CREATE POLICY "subscriptions_delete_own"
   ON subscriptions FOR DELETE TO authenticated
-  USING (user_id = auth.uid());
+  USING (auth.uid() = user_id);
 
-GRANT SELECT, INSERT, DELETE ON TABLE subscriptions TO authenticated;
+REVOKE ALL ON TABLE subscriptions FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE subscriptions TO authenticated;
+
+-- Sonda obywatelska. Szczegóły i migracja ze starej tabeli glosy_obywateli:
+-- supabase/citizen-votes.sql
+CREATE TABLE IF NOT EXISTS citizen_votes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  print_num TEXT NOT NULL,
+  vote_type TEXT NOT NULL CHECK (vote_type IN ('ZA', 'PRZECIW', 'WSTRZYMAL_SIE')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT citizen_votes_user_print_key UNIQUE (user_id, print_num)
+);
+
+CREATE INDEX IF NOT EXISTS idx_citizen_votes_print_num
+  ON citizen_votes (print_num);
+
+ALTER TABLE citizen_votes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "citizen_votes_select_anon" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_select_authenticated" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_select_public" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_insert_anon" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_insert_own" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_update_anon" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_update_own" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_delete_anon" ON citizen_votes;
+DROP POLICY IF EXISTS "citizen_votes_delete_own" ON citizen_votes;
+
+CREATE POLICY "citizen_votes_select_public"
+  ON citizen_votes FOR SELECT TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "citizen_votes_insert_own"
+  ON citizen_votes FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "citizen_votes_update_own"
+  ON citizen_votes FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "citizen_votes_delete_own"
+  ON citizen_votes FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
+
+GRANT SELECT ON TABLE citizen_votes TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON TABLE citizen_votes TO authenticated;

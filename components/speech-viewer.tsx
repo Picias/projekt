@@ -46,6 +46,7 @@ export default function SpeechViewer({ path }: SpeechViewerProps) {
       try {
         const response = await fetch(
           `/api/scrape-speech-details?path=${encodeURIComponent(path)}`,
+          { cache: "no-store" },
         );
         const data = (await response.json()) as ScrapedSpeechDetails & {
           error?: string;

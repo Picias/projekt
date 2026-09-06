@@ -1,6 +1,4 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-
+import BackButton from "@/components/back-button";
 import ObradyCalendar from "@/components/obrady-calendar";
 import ObradyLive from "@/components/obrady-live";
 import ObradyTextCard, { ObradyTekstWiersze } from "@/components/obrady-text-card";
@@ -35,13 +33,7 @@ export default async function ObradyPage() {
 
   return (
     <div className="flex flex-col gap-8 px-5 py-5">
-      <Link
-        href="/"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć
-      </Link>
+      <BackButton />
 
       <header>
         <h1 className="text-3xl font-bold leading-tight">Obrady</h1>

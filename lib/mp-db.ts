@@ -8,7 +8,6 @@ import {
 } from "@/lib/mp-stats";
 import type { InterpellationItem, VotingDeepDive } from "@/lib/sejm-voting";
 
-const RECENT_VOTES_LIMIT = 10;
 const INTERPELLATIONS_LIMIT = 20;
 
 type PoselFrekwencjaRow = {
@@ -173,8 +172,7 @@ export async function fetchMpProfileBundleFromDb(
       .from("posel_glosowania")
       .select("*")
       .eq("posel_id", mpId)
-      .order("data", { ascending: false })
-      .limit(RECENT_VOTES_LIMIT),
+      .order("sitting", { ascending: false }),
     supabaseAdmin
       .from("interpelacje")
       .select("*")

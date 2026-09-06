@@ -122,8 +122,21 @@ export function hasReachedVoting(etap: string | null | undefined): boolean {
 }
 
 export function getStageLabel(etap: string | null | undefined): string {
+  if ((etap ?? "").toLowerCase().includes("weto")) {
+    return "Weto";
+  }
+
   const key = resolveStageKey(etap);
   return LEGISLATIVE_STAGES.find((stage) => stage.key === key)?.label ?? "Projekt";
+}
+
+/** Wczesny etap: projekt dopiero wpłynął, pierwsze czytanie jeszcze się nie odbyło. */
+export function isEarlyLegislativeStage(etap: string | null | undefined): boolean {
+  return resolveStageKey(etap) === "projekt";
+}
+
+export function isVetoStage(etap: string | null | undefined): boolean {
+  return (etap ?? "").toLowerCase().includes("weto");
 }
 
 const ustawaDateFormatter = new Intl.DateTimeFormat("pl-PL", {

@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import BackButton from "@/components/back-button";
 
 type PlaceholderScreenProps = {
   title: string;
@@ -12,13 +11,7 @@ export default function PlaceholderScreen({
 }: PlaceholderScreenProps) {
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć
-      </Link>
+      <BackButton />
 
       <h1 className="text-3xl font-bold leading-tight">{title}</h1>
 

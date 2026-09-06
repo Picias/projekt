@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ChevronLeft, Loader2, LogIn, LogOut, UserRound } from "lucide-react";
+import { Loader2, LogIn, LogOut, UserRound } from "lucide-react";
 
 import AdminSyncUstawy from "@/components/admin-sync-ustawy";
+import BackButton from "@/components/back-button";
 import { useAuthUser } from "@/lib/use-auth-user";
 import { createBrowserSupabase } from "@/lib/supabase-browser";
 
@@ -24,13 +25,7 @@ export default function WiecejView({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć
-      </Link>
+      <BackButton />
 
       <h1 className="text-3xl font-bold leading-tight">Więcej</h1>
 

@@ -1,16 +1,10 @@
-import Link from "next/link";
-import { ChevronLeft, UserRoundX } from "lucide-react";
+import { UserRoundX } from "lucide-react";
+import BackButton from "@/components/back-button";
 
 export default function PoselNotFound() {
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/poslowie"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć do listy
-      </Link>
+      <BackButton label="Wróć do listy" />
 
       <section className="rounded-2xl border border-white/10 bg-navy-800/60 p-6 text-center">
         <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-white/10 text-white/50">

@@ -17,6 +17,7 @@ type MpProfileDashboardProps = {
   attendancePercent: number | null;
   clubTheme: ClubTheme;
   votes: MpVote[];
+  sittings?: number[];
   votesSimulated: boolean;
   interpellations: InterpellationItem[];
   interpellationsHasMore: boolean;
@@ -30,6 +31,7 @@ export default function MpProfileDashboard({
   attendancePercent,
   clubTheme,
   votes,
+  sittings,
   votesSimulated,
   interpellations,
   interpellationsHasMore,
@@ -48,7 +50,9 @@ export default function MpProfileDashboard({
       setSpeechesError(null);
 
       try {
-        const response = await fetch(`/api/scrape-speeches?id=${poselId}`);
+        const response = await fetch(`/api/scrape-speeches?id=${poselId}`, {
+          cache: "no-store",
+        });
         const data = (await response.json()) as ScrapedSpeech[] | { error?: string };
 
         if (!response.ok || !Array.isArray(data)) {
@@ -102,6 +106,7 @@ export default function MpProfileDashboard({
         <MpProfileTabs
           poselId={poselId}
           votes={votes}
+          sittings={sittings}
           votesSimulated={votesSimulated}
           speeches={speeches}
           speechesError={speechesError}

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { ChevronLeft, ScrollText, SearchX } from "lucide-react";
+import { ScrollText, SearchX, ShieldAlert, Snowflake } from "lucide-react";
 
+import BackButton from "@/components/back-button";
+import EmptyState from "@/components/EmptyState";
 import UstawaCard from "@/components/ustawa-card";
 import UstawyFilters, { UstawyFiltersFallback } from "@/components/ustawy-filters";
 import WatchedUstawySection from "@/components/watched-ustawy-section";
@@ -11,8 +13,14 @@ import {
   buildUstawyQuery,
   collectUstawyFilterOptions,
   countActiveUstawyFilters,
+  freezerCutoffIsoDate,
+  getUstawyEmptyCopy,
   parseUstawyFilters,
+  USTAWY_FREEZER_STAGE_FILTER,
+  USTAWY_FREEZER_TITLE_EXCLUDES,
+  USTAWY_FREEZER_TITLE_FILTER,
   USTAWY_PAGE_SIZE,
+  USTAWY_VETO_FILTER,
   type UstawyFacetRow,
   type UstawyFilters as Filters,
 } from "@/lib/ustawa-filters";
@@ -61,6 +69,21 @@ async function fetchUstawy(
     query = query.eq("etap_legislacyjny", filters.etap);
   }
 
+  if (filters.specjalne === "zamrazarka") {
+    query = query
+      .or(USTAWY_FREEZER_STAGE_FILTER)
+      .or(USTAWY_FREEZER_TITLE_FILTER)
+      .lt("data_wplywu", freezerCutoffIsoDate());
+
+    for (const keyword of USTAWY_FREEZER_TITLE_EXCLUDES) {
+      query = query.not("tytul_oficjalny", "ilike", `%${keyword}%`);
+    }
+  } else if (filters.specjalne === "zawetowane") {
+    // Wyłącznie weto — bez wykluczeń zamrażarki, żeby "Wniosek Prezydenta
+    // o ponowne rozpatrzenie" nie odpadał przez słowo "wniosek".
+    query = query.or(USTAWY_VETO_FILTER);
+  }
+
   if (filters.autor) {
     query = query.eq("autor", filters.autor);
   }
@@ -70,7 +93,7 @@ async function fetchUstawy(
   }
 
   const { data, count } = await query
-    .order("data_wplywu", { ascending: false, nullsFirst: false })
+    .order("data_wplywu", { ascending: filters.sort === "asc", nullsFirst: false })
     .limit(filters.limit);
 
   return { ustawy: (data ?? []) as UstawaListItem[], total: count ?? 0 };
@@ -83,10 +106,24 @@ async function fetchUstawy(
 async function fetchUstawyFacets(): Promise<UstawyFacetRow[]> {
   const { data } = await supabaseAdmin
     .from("ustawy")
-    .select("numer_druku, tytul_oficjalny, autor, etap_legislacyjny, tagi")
+    .select("numer_druku, tytul_oficjalny, autor, etap_legislacyjny, data_wplywu, tagi")
     .limit(8000);
 
   return (data ?? []) as UstawyFacetRow[];
+}
+
+function emptyStatePresentation(filters: Filters) {
+  const copy = getUstawyEmptyCopy(filters);
+
+  if (copy.tone === "zamrazarka") {
+    return { ...copy, icon: Snowflake, iconClassName: "text-cyan-400/30" };
+  }
+
+  if (copy.tone === "zawetowane") {
+    return { ...copy, icon: ShieldAlert, iconClassName: "text-red-400/30" };
+  }
+
+  return { ...copy, icon: SearchX, iconClassName: "text-emerald-400/25" };
 }
 
 function formatUstawyCount(total: number): string {
@@ -99,6 +136,29 @@ function formatUstawyCount(total: number): string {
   const plural = rest >= 2 && rest <= 4 && (teens < 12 || teens > 14);
 
   return `${total} ${plural ? "ustawy" : "ustaw"}`;
+}
+
+function UstawyEmptyResults({ filters }: { filters: Filters }) {
+  const { title, description, icon, iconClassName } = emptyStatePresentation(filters);
+
+  return (
+    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5">
+      <EmptyState
+        icon={icon}
+        iconClassName={iconClassName}
+        title={title}
+        description={description}
+      />
+      <div className="flex justify-center pb-6">
+        <Link
+          href="/ustawy"
+          className="rounded-xl bg-sejm-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-sejm-green-light"
+        >
+          Wyczyść wszystko
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 export default async function UstawyPage({ searchParams }: UstawyPageProps) {
@@ -114,13 +174,7 @@ export default async function UstawyPage({ searchParams }: UstawyPageProps) {
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć
-      </Link>
+      <BackButton />
 
       <header>
         <h1 className="text-3xl font-bold leading-tight">Śledzone ustawy</h1>
@@ -141,7 +195,11 @@ export default async function UstawyPage({ searchParams }: UstawyPageProps) {
         <div className="mb-3 flex items-center gap-2">
           <ScrollText size={16} className="text-emerald-300" aria-hidden />
           <h2 className="text-sm font-semibold uppercase tracking-wide text-white/70">
-            {isBrowsing ? "Wyniki" : "Najnowsze druki"}
+            {isBrowsing
+              ? "Wyniki"
+              : filters.sort === "asc"
+                ? "Najstarsze druki"
+                : "Najnowsze druki"}
           </h2>
           <span className="ml-auto text-xs text-white/45" aria-live="polite">
             {formatUstawyCount(total)}
@@ -150,19 +208,7 @@ export default async function UstawyPage({ searchParams }: UstawyPageProps) {
 
         {total === 0 ? (
           isBrowsing ? (
-            <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-6 text-center">
-              <SearchX size={26} className="mx-auto text-white/35" aria-hidden />
-              <p className="mt-3 text-sm font-semibold">Brak wyników</p>
-              <p className="mt-1 text-sm leading-relaxed text-white/55">
-                Zmień frazę wyszukiwania lub zdejmij część filtrów.
-              </p>
-              <Link
-                href="/ustawy"
-                className="mt-4 inline-block rounded-xl bg-sejm-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-sejm-green-light"
-              >
-                Wyczyść wszystko
-              </Link>
-            </div>
+            <UstawyEmptyResults filters={filters} />
           ) : (
             <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-5">
               <p className="text-sm font-semibold">Brak ustaw w bazie</p>

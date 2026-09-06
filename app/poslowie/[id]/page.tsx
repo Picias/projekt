@@ -1,17 +1,17 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   Briefcase,
   Cake,
-  ChevronLeft,
   GraduationCap,
   MapPin,
 } from "lucide-react";
+import BackButton from "@/components/back-button";
 import MpProfileDashboard from "@/components/mp-profile-dashboard";
 import MpProfilePhoto from "@/components/mp-profile-photo";
 import WatchMpButton from "@/components/watch-mp-button";
 import { getClubLabel, getClubTheme } from "@/lib/club-colors";
+import { fetchSittingNumbers } from "@/lib/glosowania-db";
 import {
   fetchMpProfileStats,
   fetchMpVotesFromRecentSittings,
@@ -29,6 +29,8 @@ import { fetchInterpellationsList } from "@/lib/sejm-voting";
 type PoselPageProps = {
   params: Promise<{ id: string }>;
 };
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PoselPageProps) {
   const { id } = await params;
@@ -68,13 +70,7 @@ function HeroMeta({
 function ProfileFetchError({ message }: { message: string }) {
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/poslowie"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć do listy
-      </Link>
+      <BackButton label="Wróć do listy" />
       <section className="rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-sm text-red-200">
         <p className="font-semibold text-red-100">Nie udało się wczytać profilu</p>
         <p className="mt-2">{message}</p>
@@ -106,13 +102,20 @@ function AnalyticsSkeleton() {
 
 async function MpAnalytics({ mp }: { mp: SejmMpProfile }) {
   const theme = getClubTheme(mp.club);
-  const [stats, interpellations, votes] = await Promise.all([
+  const [stats, interpellations, votes, sittingNumbers] = await Promise.all([
     fetchMpProfileStats(mp.id),
     fetchInterpellationsList(mp.id),
     fetchMpVotesFromRecentSittings(mp.id),
+    fetchSittingNumbers().catch(() => [] as number[]),
   ]);
   // Drugi przesiew na wszelki wypadek: kworum, wnioski formalne, proceduralne.
   const substantiveVotes = votes.filter((vote) => !isFormalVote(vote));
+  const sittings = [
+    ...new Set([
+      ...sittingNumbers,
+      ...substantiveVotes.map((vote) => vote.sitting).filter(Boolean),
+    ]),
+  ].sort((a, b) => b - a);
   const interpellationCount =
     mp.numberOfInterpellations ??
     interpellations.total ??
@@ -131,6 +134,7 @@ async function MpAnalytics({ mp }: { mp: SejmMpProfile }) {
       attendancePercent={stats.attendancePercent}
       clubTheme={theme}
       votes={substantiveVotes}
+      sittings={sittings}
       votesSimulated={false}
       interpellations={interpellations.items}
       interpellationsHasMore={interpellations.hasMore}
@@ -172,13 +176,7 @@ export default async function PoselPage({ params }: PoselPageProps) {
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/poslowie"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć do listy
-      </Link>
+      <BackButton label="Wróć do listy" />
 
       <section
         className={`relative overflow-hidden rounded-3xl border bg-linear-to-br from-navy-800 via-navy-800/90 to-transparent p-5 ${theme.border}`}

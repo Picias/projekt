@@ -13,16 +13,7 @@ import {
 
 type VotingPageProps = {
   params: Promise<{ posiedzenie: string; glosowanie: string }>;
-  searchParams: Promise<{ from?: string }>;
 };
-
-function safeInternalPath(value: string | undefined): string | undefined {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
-    return undefined;
-  }
-
-  return value;
-}
 
 export async function generateMetadata({ params }: VotingPageProps) {
   const { posiedzenie, glosowanie } = await params;
@@ -181,10 +172,10 @@ function OutcomeBanner({
   );
 }
 
-function FetchError({ message, from }: { message: string; from?: string }) {
+function FetchError({ message }: { message: string }) {
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <BackButton href={from ?? "/poslowie"} label={from ? "Wróć do profilu" : "Wróć"} />
+      <BackButton />
       <section className="rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-sm text-red-200">
         <p className="font-semibold text-red-100">Nie udało się wczytać głosowania</p>
         <p className="mt-2">{message}</p>
@@ -258,11 +249,8 @@ function VotingBody({
 
 export default async function GlosowanieSzczegolyPage({
   params,
-  searchParams,
 }: VotingPageProps) {
   const { posiedzenie, glosowanie } = await params;
-  const { from: fromRaw } = await searchParams;
-  const from = safeInternalPath(fromRaw);
   const sitting = Number(posiedzenie);
   const votingNumber = Number(glosowanie);
 
@@ -277,15 +265,12 @@ export default async function GlosowanieSzczegolyPage({
   }
 
   if (result.status === "error") {
-    return <FetchError message={result.message} from={from} />;
+    return <FetchError message={result.message} />;
   }
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <BackButton
-        href={from ?? "/poslowie"}
-        label={from?.startsWith("/poslowie/") ? "Wróć do profilu" : "Wróć"}
-      />
+      <BackButton />
       <VotingBody
         sitting={result.details.sitting ?? sitting}
         votingNumber={result.details.votingNumber ?? votingNumber}

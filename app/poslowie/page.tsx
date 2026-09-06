@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { ChevronLeft, Users } from "lucide-react";
+import { Users } from "lucide-react";
+import BackButton from "@/components/back-button";
 import PoslowieBrowser from "@/components/poslowie-browser";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { sortPoslowieByNazwisko, toPoselProfil } from "@/lib/posel";
@@ -65,13 +66,7 @@ function PoslowieListSkeleton() {
 export default function PoslowiePage() {
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć
-      </Link>
+      <BackButton />
 
       <div className="flex items-center gap-3">
         <span className="flex size-11 items-center justify-center rounded-xl bg-sejm-green/15 text-sejm-green-light">

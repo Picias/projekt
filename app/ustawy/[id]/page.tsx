@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowRightLeft,
-  ChevronLeft,
   FileDown,
   FileText,
   Lightbulb,
@@ -12,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import BackButton from "@/components/back-button";
 import GenerateAiSummary from "@/components/generate-ai-summary";
 import GlosObywateli from "@/components/glos-obywateli";
 import LegislativeProgress from "@/components/legislative-progress";
@@ -100,13 +99,7 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/ustawy"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć do listy ustaw
-      </Link>
+      <BackButton label="Wróć do listy ustaw" />
 
       <header>
         <div className="flex flex-wrap items-center gap-2">
@@ -172,7 +165,7 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
         hasVoting={hasReachedVoting(ustawa.etap_legislacyjny)}
       />
 
-      <GlosObywateli ustawaId={ustawa.id} />
+      <GlosObywateli printNum={ustawa.numer_druku} />
 
       <section aria-labelledby="metryka" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">

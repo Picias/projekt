@@ -1,8 +1,8 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, Landmark } from "lucide-react";
+import { Landmark } from "lucide-react";
 
+import BackButton from "@/components/back-button";
 import LoginForm from "@/components/login-form";
 import { isOnboardingComplete, safeNextPath, type Profile } from "@/lib/profile";
 import { createServerSupabase } from "@/lib/supabase-server";
@@ -39,13 +39,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href="/"
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć na start
-      </Link>
+      <BackButton label="Wróć na start" />
 
       <header className="flex flex-col items-center text-center">
         <span className="flex size-14 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25">

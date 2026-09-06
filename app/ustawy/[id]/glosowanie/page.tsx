@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, ChevronLeft, Users } from "lucide-react";
+import { CalendarDays, Users } from "lucide-react";
 
+import BackButton from "@/components/back-button";
 import GlosowanieLista from "@/components/glosowanie-lista";
 import {
   formatDataGlosowania,
@@ -79,13 +80,7 @@ export default async function UstawaGlosowaniePage({ params }: GlosowaniePagePro
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
-      <Link
-        href={`/ustawy/${ustawa.id}`}
-        className="flex w-fit items-center gap-1 text-sm text-white/70 transition-colors hover:text-white"
-      >
-        <ChevronLeft size={18} aria-hidden />
-        Wróć do druku
-      </Link>
+      <BackButton label="Wróć do druku" />
 
       <header>
         <div className="flex flex-wrap items-center gap-2">

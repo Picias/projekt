@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import {
-  demoBaseline,
   isTypGlosu,
   PUSTE_WYNIKI,
+  wynikiZGlosow,
   type TypGlosu,
   type WynikiSondy,
 } from "@/lib/glosy-obywateli";
@@ -26,17 +26,7 @@ async function fetchWyniki(ustawaId: number): Promise<WynikiSondy> {
     throw new Error(error.message);
   }
 
-  const wyniki = { ...demoBaseline(ustawaId) };
-
-  for (const row of data ?? []) {
-    const typ = row.typ_glosu as string;
-
-    if (isTypGlosu(typ)) {
-      wyniki[typ] += 1;
-    }
-  }
-
-  return wyniki;
+  return wynikiZGlosow((data ?? []).map((row) => row.typ_glosu as string));
 }
 
 async function fetchMojGlos(
