@@ -5,8 +5,8 @@ import { GenerateAiError, generateAiSummaryFromSejm } from "@/lib/generate-ai";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 if (typeof globalThis.DOMMatrix === "undefined") {
-  (globalThis as typeof globalThis & { DOMMatrix: new () => object }).DOMMatrix =
-    class DOMMatrix {};
+  // @ts-ignore
+  globalThis.DOMMatrix = class DOMMatrix {} as any;
 }
 
 export const dynamic = "force-dynamic";

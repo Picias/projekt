@@ -3,8 +3,8 @@ import OpenAI, { APIError } from "openai";
 import { fetchSejmJson, SEJM_API_BASE, SEJM_TERM } from "@/lib/sejm-api";
 
 if (typeof globalThis.DOMMatrix === "undefined") {
-  (globalThis as typeof globalThis & { DOMMatrix: new () => object }).DOMMatrix =
-    class DOMMatrix {};
+  // @ts-ignore
+  globalThis.DOMMatrix = class DOMMatrix {} as any;
 }
 
 export const PDF_TEXT_LIMIT = 100_000;
