@@ -114,8 +114,8 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
           </span>
         </div>
 
-        <h1 className="mt-4 text-2xl font-bold leading-snug">
-          {shortenTitle(ustawa.tytul_oficjalny, 110)}
+        <h1 className="mt-4 text-xl sm:text-2xl font-bold text-white break-words leading-snug">
+          {ustawa.tytul_oficjalny}
         </h1>
       </header>
 

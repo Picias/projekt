@@ -104,12 +104,19 @@ async function downloadPdf(pdfUrl: string): Promise<Uint8Array> {
 
 export async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
   const { PDFParse } = await import("pdf-parse");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  if (PDFParse.isNodeJS) {
-    PDFParse.setWorker();
-  }
+  // Vercel nie serwuje workerów pdf.js (*.mjs). Pusty workerSrc wymusza
+  // przetwarzanie w tym samym wątku zamiast szukać pdf.worker.mjs.
+  PDFParse.setWorker("");
+  pdfjs.GlobalWorkerOptions.workerSrc = "";
 
-  const parser = new PDFParse({ data: pdfBytes });
+  const parser = new PDFParse({
+    data: pdfBytes,
+    useWasm: false,
+    isOffscreenCanvasSupported: false,
+    disableWorker: true,
+  } as ConstructorParameters<typeof PDFParse>[0] & { disableWorker?: boolean });
 
   try {
     const result = await parser.getText();
