@@ -1,7 +1,11 @@
 import OpenAI, { APIError } from "openai";
-import { PDFParse } from "pdf-parse";
 
 import { fetchSejmJson, SEJM_API_BASE, SEJM_TERM } from "@/lib/sejm-api";
+
+if (typeof globalThis.DOMMatrix === "undefined") {
+  (globalThis as typeof globalThis & { DOMMatrix: new () => object }).DOMMatrix =
+    class DOMMatrix {};
+}
 
 export const PDF_TEXT_LIMIT = 100_000;
 export const PRIMARY_MODEL = "gpt-5.6-luna";
@@ -99,6 +103,8 @@ async function downloadPdf(pdfUrl: string): Promise<Uint8Array> {
 }
 
 export async function extractPdfText(pdfBytes: Uint8Array): Promise<string> {
+  const { PDFParse } = await import("pdf-parse");
+
   if (PDFParse.isNodeJS) {
     PDFParse.setWorker();
   }
