@@ -23,7 +23,7 @@ function hasValidCronSecret(request: Request): boolean {
 }
 
 /**
- * Vercel Cron wysyła Authorization: Bearer ${CRON_SECRET}.
+ * Vercel Cron wysyła Authorization: Bearer <CRON_SECRET>.
  * Przycisk w panelu admina nie może trzymać tego hasła w przeglądarce,
  * więc dopuszczamy też zalogowaną sesję z adresem z ADMIN_EMAIL.
  */

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { GenerateAiError, generateAiSummaryFromSejm } from "@/lib/generate-ai";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 type GenerateAiBody = {

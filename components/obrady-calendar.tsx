@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import ObradyTextCard, { ObradyTekstWiersze } from "@/components/obrady-text-card";
@@ -69,7 +69,7 @@ function monthCells(year: number, month: number): string[] {
 
 export default function ObradyCalendar({
   sittingDays,
-  today: _today,
+  today,
   initialDate,
   initialTitle,
   initialSitting,
@@ -82,6 +82,7 @@ export default function ObradyCalendar({
   const [sitting, setSitting] = useState(initialSitting);
   const [title, setTitle] = useState(initialTitle);
   const [loading, setLoading] = useState(false);
+  const agendaRequest = useRef<AbortController | null>(null);
 
   const sittingByDate = useMemo(() => {
     const map = new Map<string, SittingDay>();
@@ -93,11 +94,23 @@ export default function ObradyCalendar({
     return map;
   }, [sittingDays]);
 
-  const cells = monthCells(cursor.year, cursor.month);
-  const selectedSitting = sittingByDate.get(selectedDate);
-
   useEffect(() => {
-    if (selectedDate === initialDate) {
+    return () => {
+      agendaRequest.current?.abort();
+    };
+  }, []);
+
+  function selectDate(date: string) {
+    const marker = sittingByDate.get(date);
+
+    if (!marker) {
+      return;
+    }
+
+    agendaRequest.current?.abort();
+    setSelectedDate(date);
+
+    if (date === initialDate) {
       setAgendaTekst(initialAgendaTekst);
       setSitting(initialSitting);
       setTitle(initialTitle);
@@ -105,46 +118,41 @@ export default function ObradyCalendar({
       return;
     }
 
-    const marker = sittingByDate.get(selectedDate);
-
-    if (!marker) {
-      setAgendaTekst(null);
-      setSitting(null);
-      setTitle(null);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
+    const controller = new AbortController();
+    agendaRequest.current = controller;
     setLoading(true);
     setTitle(marker.title);
     setSitting(marker.number);
 
-    fetch(`/api/obrady/agenda?date=${selectedDate}`, { cache: "no-store" })
+    fetch(`/api/obrady/agenda?date=${date}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then(async (response) => {
         const payload = (await response.json()) as AgendaResponse;
 
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setAgendaTekst(payload.agendaTekst ?? null);
           setSitting(payload.sitting ?? marker.number);
           setTitle(payload.title ?? marker.title);
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          setAgendaTekst(null);
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+          return;
         }
+
+        setAgendaTekst(null);
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       });
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDate, initialDate, initialAgendaTekst, initialSitting, initialTitle, sittingByDate]);
+  const cells = monthCells(cursor.year, cursor.month);
+  const selectedSitting = sittingByDate.get(selectedDate);
 
   return (
     <section className="flex flex-col gap-6">
@@ -184,6 +192,7 @@ export default function ObradyCalendar({
             const inMonth = date.startsWith(`${cursor.year}-${pad(cursor.month + 1)}`);
             const sittingDay = sittingByDate.get(date);
             const selected = date === selectedDate;
+            const isToday = date === today;
 
             let dayClassName =
               "h-10 w-10 mx-auto flex items-center justify-center rounded-lg text-sm transition-all duration-200";
@@ -194,6 +203,13 @@ export default function ObradyCalendar({
             } else if (sittingDay) {
               dayClassName +=
                 " bg-emerald-500/15 font-semibold text-emerald-400 hover:bg-emerald-500/25";
+              if (isToday) {
+                dayClassName += " ring-1 ring-white/50";
+              }
+            } else if (isToday) {
+              dayClassName += ` font-semibold text-white ring-1 ring-white/30 hover:bg-slate-800 ${
+                inMonth ? "" : "opacity-40"
+              }`;
             } else {
               dayClassName += ` text-slate-300 hover:bg-slate-800 ${
                 inMonth ? "" : "opacity-40"
@@ -205,7 +221,7 @@ export default function ObradyCalendar({
                 key={date}
                 type="button"
                 disabled={!sittingDay}
-                onClick={() => sittingDay && setSelectedDate(date)}
+                onClick={() => selectDate(date)}
                 aria-pressed={selected}
                 aria-label={
                   sittingDay

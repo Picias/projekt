@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { syncUstawy } from "@/lib/sync-ustawy";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function GET(request: Request) {
+  const authorized = await isAuthorizedCronRequest(request);
+
+  if (!authorized) {
+    return NextResponse.json(
+      { status: "error", message: "Unauthorized" },
+      { status: 401 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const rawLimit = searchParams.get("limit");
   const refreshSummaries = searchParams.get("refresh_summaries") === "true";

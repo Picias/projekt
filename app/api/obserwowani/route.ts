@@ -4,6 +4,16 @@ import { fetchWatchedPoslowie } from "@/lib/obserwowani-db";
 import { getSessionUserId } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+};
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const poselIdParam = searchParams.get("posel_id");
@@ -11,20 +21,17 @@ export async function GET(request: Request) {
 
   if (!userId) {
     if (poselIdParam !== null) {
-      return NextResponse.json({ watching: false, zalogowany: false });
+      return json({ watching: false, zalogowany: false });
     }
 
-    return NextResponse.json({ poslowie: [], zalogowany: false });
+    return json({ poslowie: [], zalogowany: false });
   }
 
   if (poselIdParam !== null) {
     const poselId = Number(poselIdParam);
 
     if (!Number.isInteger(poselId)) {
-      return NextResponse.json(
-        { error: "Nieprawidłowy parametr: posel_id" },
-        { status: 400 },
-      );
+      return json({ error: "Nieprawidłowy parametr: posel_id" }, 400);
     }
 
     const { data, error } = await supabaseAdmin
@@ -35,18 +42,18 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return json({ error: error.message }, 500);
     }
 
-    return NextResponse.json({ watching: Boolean(data), zalogowany: true });
+    return json({ watching: Boolean(data), zalogowany: true });
   }
 
   try {
     const poslowie = await fetchWatchedPoslowie(userId);
-    return NextResponse.json({ poslowie, zalogowany: true });
+    return json({ poslowie, zalogowany: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się pobrać listy.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return json({ error: message }, 500);
   }
 }
 
@@ -55,9 +62,9 @@ export async function POST(request: Request) {
     const userId = await getSessionUserId();
 
     if (!userId) {
-      return NextResponse.json(
+      return json(
         { error: "Zaloguj się, aby obserwować posła.", code: "UNAUTHENTICATED" },
-        { status: 401 },
+        401,
       );
     }
 
@@ -68,10 +75,7 @@ export async function POST(request: Request) {
     const poselId = body.posel_id;
 
     if (!Number.isInteger(poselId)) {
-      return NextResponse.json(
-        { error: "Wymagane pole: posel_id" },
-        { status: 400 },
-      );
+      return json({ error: "Wymagane pole: posel_id" }, 400);
     }
 
     const { data: existing, error: readError } = await supabaseAdmin
@@ -82,7 +86,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (readError) {
-      return NextResponse.json({ error: readError.message }, { status: 500 });
+      return json({ error: readError.message }, 500);
     }
 
     if (existing) {
@@ -93,10 +97,10 @@ export async function POST(request: Request) {
         .eq("posel_id", poselId);
 
       if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 });
+        return json({ error: deleteError.message }, 500);
       }
 
-      return NextResponse.json({ watching: false });
+      return json({ watching: false });
     }
 
     const { error: insertError } = await supabaseAdmin
@@ -104,11 +108,11 @@ export async function POST(request: Request) {
       .insert({ user_id: userId, posel_id: poselId });
 
     if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+      return json({ error: insertError.message }, 500);
     }
 
-    return NextResponse.json({ watching: true });
+    return json({ watching: true });
   } catch {
-    return NextResponse.json({ error: "Nieprawidłowe żądanie" }, { status: 400 });
+    return json({ error: "Nieprawidłowe żądanie" }, 400);
   }
 }

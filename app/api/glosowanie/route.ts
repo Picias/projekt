@@ -5,6 +5,16 @@ import { fetchGlosyObserwowanych, fetchNajnowszeGlosowanie } from "@/lib/glosowa
 import { fetchWatchedPoslowie } from "@/lib/obserwowani-db";
 import { getSessionUserId } from "@/lib/supabase-server";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+};
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
+}
+
 type PoselZGlosem = {
   id: number;
   imie_nazwisko: string;
@@ -20,7 +30,7 @@ export async function GET(request: Request) {
   const ustawaId = Number(searchParams.get("ustawa_id"));
 
   if (!Number.isInteger(ustawaId)) {
-    return NextResponse.json({ error: "Wymagany parametr: ustawa_id" }, { status: 400 });
+    return json({ error: "Wymagany parametr: ustawa_id" }, 400);
   }
 
   const userId = await getSessionUserId();
@@ -28,7 +38,7 @@ export async function GET(request: Request) {
   try {
     if (!userId) {
       const glosowanie = await fetchNajnowszeGlosowanie(ustawaId);
-      return NextResponse.json({ glosowanie, poslowie: [], zalogowany: false });
+      return json({ glosowanie, poslowie: [], zalogowany: false });
     }
 
     const [glosowanie, obserwowani] = await Promise.all([
@@ -37,7 +47,7 @@ export async function GET(request: Request) {
     ]);
 
     if (!glosowanie) {
-      return NextResponse.json({ glosowanie: null, poslowie: [] });
+      return json({ glosowanie: null, poslowie: [] });
     }
 
     const glosy = await fetchGlosyObserwowanych(
@@ -53,10 +63,10 @@ export async function GET(request: Request) {
       glos: glosy[posel.id] ?? null,
     }));
 
-    return NextResponse.json({ glosowanie, poslowie });
+    return json({ glosowanie, poslowie });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Nie udało się pobrać wyników głosowania.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return json({ error: message }, 500);
   }
 }

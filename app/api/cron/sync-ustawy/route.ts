@@ -3,13 +3,8 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { syncUstawy } from "@/lib/sync-ustawy";
 
-// Dodaj do pliku .env.local (oraz do zmiennych środowiskowych na Vercel):
-//   CRON_SECRET=jakies_trudne_haslo_123
-// Ta zmienna zabezpiecza skrypt przed niepowołanym uruchomieniem z zewnątrz.
-// Vercel Cron dołączy ją automatycznie jako nagłówek Authorization: Bearer …
-//
-// Do ręcznego przycisku w panelu potrzebny jest też Twój e-mail:
-//   ADMIN_EMAIL=twoj@email.pl
+// CRON_SECRET i ADMIN_EMAIL ustaw wyłącznie w .env.local / Vercel.
+// Vercel Cron wysyła Authorization: Bearer <CRON_SECRET>.
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;

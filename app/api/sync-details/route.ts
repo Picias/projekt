@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { syncAllMpDetails, syncMpDetailsBatch } from "@/lib/sync-mp-details";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
+  const authorized = await isAuthorizedCronRequest(request);
+
+  if (!authorized) {
+    return NextResponse.json(
+      { status: "error", message: "Unauthorized" },
+      { status: 401 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const poselIdParam = searchParams.get("posel_id");
 

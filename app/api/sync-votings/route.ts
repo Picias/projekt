@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { syncVotings } from "@/lib/sync-votings";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 function readPositiveInt(value: string | null): number | undefined {
@@ -11,6 +13,15 @@ function readPositiveInt(value: string | null): number | undefined {
 }
 
 export async function GET(request: Request) {
+  const authorized = await isAuthorizedCronRequest(request);
+
+  if (!authorized) {
+    return NextResponse.json(
+      { status: "error", message: "Unauthorized" },
+      { status: 401 },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
 
   try {

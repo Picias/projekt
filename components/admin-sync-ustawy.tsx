@@ -30,9 +30,9 @@ export default function AdminSyncUstawy() {
     setPending(true);
 
     try {
-      // CRON_SECRET zostaje na serwerze — przeglądarka nie może go poznać.
+      // Sekret CRON zostaje na serwerze — przeglądarka go nie poznaje.
       // Endpoint honoruje sesję administratora (ADMIN_EMAIL) albo nagłówek
-      // Authorization: Bearer ${CRON_SECRET} (tak woła Vercel Cron).
+      // Authorization z CRON_SECRET (tak woła Vercel Cron).
       const response = await fetch("/api/cron/smart-sync?force=true", {
         method: "GET",
         credentials: "same-origin",

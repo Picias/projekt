@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const SEJM_TERM = 10;
@@ -46,7 +47,18 @@ function mapProceeding(
   };
 }
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  const authorized = await isAuthorizedCronRequest(request);
+
+  if (!authorized) {
+    return NextResponse.json(
+      { status: "error", message: "Unauthorized", synced: 0 },
+      { status: 401 },
+    );
+  }
+
   try {
     const response = await fetch(SEJM_PROCEEDINGS_URL, {
       headers: { Accept: "application/json" },

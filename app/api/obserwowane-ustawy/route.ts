@@ -4,6 +4,16 @@ import { getSessionUserId } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Ustawa } from "@/lib/ustawa";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+};
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
+}
+
 const USTAWA_COLUMNS =
   "id, numer_druku, tytul_oficjalny, autor, data_wplywu, etap_legislacyjny";
 
@@ -88,7 +98,7 @@ export async function GET(request: Request) {
     if (ustawaIdParam !== null) {
       const ustawaId = Number(ustawaIdParam);
 
-      return NextResponse.json({
+      return json({
         watching: false,
         zalogowany: false,
         liczba_obserwujacych: Number.isInteger(ustawaId)
@@ -97,17 +107,14 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json({ ustawy: [], zalogowany: false });
+    return json({ ustawy: [], zalogowany: false });
   }
 
   if (ustawaIdParam !== null) {
     const ustawaId = Number(ustawaIdParam);
 
     if (!Number.isInteger(ustawaId)) {
-      return NextResponse.json(
-        { error: "Nieprawidłowy parametr: ustawa_id" },
-        { status: 400 },
-      );
+      return json({ error: "Nieprawidłowy parametr: ustawa_id" }, 400);
     }
 
     const { data, error } = await supabaseAdmin
@@ -118,10 +125,10 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return json({ error: error.message }, 500);
     }
 
-    return NextResponse.json({
+    return json({
       watching: Boolean(data),
       zalogowany: true,
       liczba_obserwujacych: await readLiczbaObserwujacych(ustawaId),
@@ -130,10 +137,10 @@ export async function GET(request: Request) {
 
   try {
     const ustawy = await fetchWatchedUstawy(userId);
-    return NextResponse.json({ ustawy, zalogowany: true });
+    return json({ ustawy, zalogowany: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się pobrać listy.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return json({ error: message }, 500);
   }
 }
 
@@ -142,9 +149,9 @@ export async function POST(request: Request) {
     const userId = await getSessionUserId();
 
     if (!userId) {
-      return NextResponse.json(
+      return json(
         { error: "Zaloguj się, aby śledzić ustawę.", code: "UNAUTHENTICATED" },
-        { status: 401 },
+        401,
       );
     }
 
@@ -155,10 +162,7 @@ export async function POST(request: Request) {
     const ustawaId = body.ustawa_id;
 
     if (typeof ustawaId !== "number" || !Number.isInteger(ustawaId)) {
-      return NextResponse.json(
-        { error: "Wymagane pole: ustawa_id" },
-        { status: 400 },
-      );
+      return json({ error: "Wymagane pole: ustawa_id" }, 400);
     }
 
     const { data: existing, error: readError } = await supabaseAdmin
@@ -169,7 +173,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (readError) {
-      return NextResponse.json({ error: readError.message }, { status: 500 });
+      return json({ error: readError.message }, 500);
     }
 
     if (existing) {
@@ -180,10 +184,10 @@ export async function POST(request: Request) {
         .eq("ustawa_id", ustawaId);
 
       if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 });
+        return json({ error: deleteError.message }, 500);
       }
 
-      return NextResponse.json({
+      return json({
         watching: false,
         liczba_obserwujacych: await refreshLiczbaObserwujacych(ustawaId),
       });
@@ -194,14 +198,14 @@ export async function POST(request: Request) {
       .insert({ user_id: userId, ustawa_id: ustawaId });
 
     if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+      return json({ error: insertError.message }, 500);
     }
 
-    return NextResponse.json({
+    return json({
       watching: true,
       liczba_obserwujacych: await refreshLiczbaObserwujacych(ustawaId),
     });
   } catch {
-    return NextResponse.json({ error: "Nieprawidłowe żądanie" }, { status: 400 });
+    return json({ error: "Nieprawidłowe żądanie" }, 400);
   }
 }

@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS glosy_obywateli (
 );
 
 -- Jeden głos na druk na użytkownika: zmiana zdania nadpisuje wiersz przez
--- upsert w /api/glosy-obywateli. Postgres traktuje NULL-e jako różne, więc
+-- upsert w /api/citizen-votes. Postgres traktuje NULL-e jako różne, więc
 -- indeks nie blokuje głosów oddanych bez identyfikatora.
 CREATE UNIQUE INDEX IF NOT EXISTS glosy_obywateli_ustawa_user_key
   ON glosy_obywateli (ustawa_id, user_id);
@@ -428,7 +428,7 @@ DROP POLICY IF EXISTS "obserwowane_ustawy_insert_anon" ON obserwowane_ustawy;
 DROP POLICY IF EXISTS "obserwowane_ustawy_delete_anon" ON obserwowane_ustawy;
 
 -- Sonda obywatelska działa tak samo: zapis i odczyt wyłącznie przez
--- /api/glosy-obywateli, więc anon nie dostaje żadnej polityki. Gdyby dostał
+-- /api/citizen-votes, więc anon nie dostaje żadnej polityki. Gdyby dostał
 -- SELECT, każdy mógłby odczytać, jak zagłosował konkretny user_id.
 DROP POLICY IF EXISTS "glosy_obywateli_select_anon" ON glosy_obywateli;
 DROP POLICY IF EXISTS "glosy_obywateli_insert_anon" ON glosy_obywateli;
