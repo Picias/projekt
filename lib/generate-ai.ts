@@ -2,6 +2,7 @@ import OpenAI, { APIError } from "openai";
 import { getData } from "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
 
+import { IMPACT_AREAS, MATCHABLE_IMPACT_AREA_KEYS, isImpactAreaKey } from "@/lib/impact";
 import { fetchSejmJson, SEJM_API_BASE, SEJM_TERM } from "@/lib/sejm-api";
 
 if (typeof globalThis.DOMMatrix === "undefined") {
@@ -14,7 +15,15 @@ export const PRIMARY_MODEL = "gpt-5.6-luna";
 export const FALLBACK_MODEL = "gpt-4o-mini";
 
 const SYSTEM_PROMPT =
-  "Jesteś ekspertem prawnym. Przeanalizuj poniższy oryginalny tekst projektu ustawy (zwróć szczególną uwagę na Uzasadnienie i tabele OSR). Wygeneruj odpowiedź w formacie JSON z polami: w_skrocie, kogo_dotyczy, co_zmienia, skad_pieniadze. Pisz bardzo prostym, obywatelskim językiem, krótko i w punktach. Jeśli w dokumencie są konkrety finansowe, umieść je w skad_pieniadze. Oto tekst:";
+  "Jesteś ekspertem, który tłumaczy ustawy na język zwykłego człowieka. Przeanalizuj oryginalny tekst projektu (szczególnie Uzasadnienie i tabele OSR). " +
+  "Odpowiedz wyłącznie JSON-em z polami: w_skrocie, kogo_dotyczy, co_zmienia, skad_pieniadze, obszary. " +
+  "Twarde zasady dla pól w_skrocie, kogo_dotyczy, co_zmienia i skad_pieniadze: " +
+  "1) Maksymalnie 3 punkty na sekcję, każdy w osobnej linii zaczynającej się od „• ”. Żadnych wstępów, akapitów ani czwartego punktu. " +
+  "2) Każdy punkt to jedno krótkie zdanie prostym językiem, bez urzędniczego żargonu (bez słów takich jak „nowelizacja”, „przepisy przejściowe”, „podmiot”, „OSR”). " +
+  "3) W każdym punkcie pogrub markdownem ** ** dokładnie 2–3 kluczowe słowa albo jedną najważniejszą frazę, np. „Podatek spadnie o **2 punkty procentowe** dla **osób zarabiających najmniej**.”. " +
+  "4) Konkretne kwoty, progi i terminy wstawiaj do skad_pieniadze; jeśli dokument ich nie podaje, napisz wprost, że koszt nie jest podany. " +
+  `Pole obszary to tablica od 1 do 3 kluczy z listy: ${MATCHABLE_IMPACT_AREA_KEYS.join(", ")} — obszary codziennego życia, na które projekt wpływa najmocniej. ` +
+  "Oto tekst:";
 
 type SejmPrint = {
   number?: string;
@@ -26,6 +35,12 @@ export type AiSummaryFields = {
   ai_kogo_dotyczy: string;
   ai_co_zmienia: string;
   ai_skad_pieniadze: string;
+};
+
+export type AiSummaryResult = {
+  summary: AiSummaryFields;
+  /** Etykiety obszarów życia (IMPACT_AREAS) do zapisu w kolumnie tagi. */
+  tagi: string[];
 };
 
 export class GenerateAiError extends Error {
@@ -137,6 +152,7 @@ function fieldToText(value: unknown): string {
     return value
       .map((item) => (typeof item === "string" ? item.trim() : ""))
       .filter(Boolean)
+      .slice(0, 3)
       .map((item) => (item.startsWith("•") || item.startsWith("-") ? item : `• ${item}`))
       .join("\n");
   }
@@ -144,7 +160,19 @@ function fieldToText(value: unknown): string {
   return "";
 }
 
-function parseSummaryJson(raw: string): AiSummaryFields {
+function parseAreaTags(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const keys = value
+    .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
+    .filter(isImpactAreaKey);
+
+  return [...new Set(keys)].slice(0, 3).map((key) => IMPACT_AREAS[key].label);
+}
+
+function parseSummaryJson(raw: string): AiSummaryResult {
   const stripped = raw
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -186,7 +214,7 @@ function parseSummaryJson(raw: string): AiSummaryFields {
     throw new GenerateAiError("Model zwrócił pustą odpowiedź.", 502);
   }
 
-  return summary;
+  return { summary, tagi: parseAreaTags(data.obszary) };
 }
 
 function isMissingModelError(error: unknown): boolean {
@@ -212,7 +240,7 @@ async function requestSummary(model: string, documentText: string) {
   });
 }
 
-export async function summarizeBillText(documentText: string): Promise<AiSummaryFields> {
+export async function summarizeBillText(documentText: string): Promise<AiSummaryResult> {
   if (!process.env.OPENAI_API_KEY) {
     throw new GenerateAiError("Brak zmiennej środowiskowej OPENAI_API_KEY.", 500);
   }
@@ -253,7 +281,7 @@ export async function summarizeBillText(documentText: string): Promise<AiSummary
   return parseSummaryJson(raw);
 }
 
-export async function generateAiSummaryFromSejm(numerDruku: string): Promise<AiSummaryFields> {
+export async function generateAiSummaryFromSejm(numerDruku: string): Promise<AiSummaryResult> {
   const pdfUrl = await fetchPrintPdfUrl(numerDruku);
   const pdfBytes = await downloadPdf(pdfUrl);
   const documentText = await extractPdfText(pdfBytes);

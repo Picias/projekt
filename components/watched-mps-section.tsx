@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Heart, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import MpCard from "@/components/mp-card";
 import { useAuthUser } from "@/lib/use-auth-user";
+import { useSubscriptionsVersion } from "@/lib/use-watched-ustawy";
 import type { Posel } from "@/lib/posel";
 
 function WatchedMpsSkeleton() {
@@ -22,30 +23,20 @@ function WatchedMpsSkeleton() {
 
 function WatchedMpsEmpty() {
   return (
-    <article className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-5 ring-1 ring-white/10">
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white/45">
-          <Heart size={18} aria-hidden />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-white/90">
-            Nie obserwujesz jeszcze nikogo
-          </p>
-          <p className="mt-1 text-sm leading-relaxed text-white/55">
-            Przejdź do zakładki{" "}
-            <Link href="/poslowie" className="font-medium text-sejm-green-light hover:underline">
-              Posłowie
-            </Link>{" "}
-            i kliknij dzwonek przy profilu, który chcesz śledzić.
-          </p>
-        </div>
-      </div>
-    </article>
+    <p className="rounded-2xl border border-dashed border-white/25 bg-white/5 p-4 text-sm leading-relaxed text-white/80">
+      Nie obserwujesz jeszcze żadnego posła. Wybierz swój okręg powyżej albo przejdź do
+      zakładki{" "}
+      <Link href="/poslowie" className="font-semibold text-emerald-300 underline">
+        Posłowie
+      </Link>{" "}
+      i kliknij dzwonek przy profilu.
+    </p>
   );
 }
 
 export default function WatchedMpsSection() {
   const user = useAuthUser();
+  const version = useSubscriptionsVersion();
   const [poslowie, setPoslowie] = useState<Posel[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +58,7 @@ export default function WatchedMpsSection() {
       }
 
       try {
-        const response = await fetch("/api/obserwowani");
+        const response = await fetch("/api/obserwowani", { cache: "no-store" });
 
         if (!response.ok) {
           throw new Error("Nie udało się pobrać obserwowanych posłów.");
@@ -76,6 +67,7 @@ export default function WatchedMpsSection() {
         const data = (await response.json()) as { poslowie?: Posel[] };
 
         if (!cancelled) {
+          setError(null);
           setPoslowie(data.poslowie ?? []);
         }
       } catch (loadError) {
@@ -99,29 +91,29 @@ export default function WatchedMpsSection() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, version]);
 
   return (
-    <section>
-      <div className="flex items-baseline justify-between">
+    <div>
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Users size={18} className="text-sejm-green-light" aria-hidden />
-          <h2 className="text-lg font-semibold">Moi posłowie</h2>
+          <Users size={18} className="text-emerald-300" aria-hidden />
+          <h3 className="text-base font-bold">Posłowie</h3>
         </div>
         {poslowie && poslowie.length > 0 ? (
           <Link
             href="/poslowie"
-            className="text-xs font-medium text-sejm-green-light hover:underline"
+            className="flex min-h-11 items-center text-sm font-semibold text-emerald-300 hover:underline"
           >
-            Zobacz wszystkich
+            Wszyscy posłowie
           </Link>
         ) : null}
       </div>
 
-      <div className="mt-3 flex flex-col gap-3">
+      <div className="mt-3 flex flex-col gap-4">
         {loading ? <WatchedMpsSkeleton /> : null}
         {!loading && error ? (
-          <p className="rounded-2xl bg-red-500/10 p-4 text-sm text-red-300 ring-1 ring-red-400/20">
+          <p role="alert" className="rounded-2xl bg-red-500/10 p-4 text-sm text-red-100 ring-1 ring-red-400/30">
             {error}
           </p>
         ) : null}
@@ -138,6 +130,6 @@ export default function WatchedMpsSection() {
             ))
           : null}
       </div>
-    </section>
+    </div>
   );
 }

@@ -11,26 +11,38 @@ import MpProfileDashboard from "@/components/mp-profile-dashboard";
 import MpProfilePhoto from "@/components/mp-profile-photo";
 import WatchMpButton from "@/components/watch-mp-button";
 import { getClubLabel, getClubTheme } from "@/lib/club-colors";
-import { fetchSittingNumbers } from "@/lib/glosowania-db";
-import {
-  fetchMpProfileStats,
-  fetchMpVotesFromRecentSittings,
-  isFormalVote,
-} from "@/lib/mp-stats";
+import { fetchMpProfileBundleFromDb } from "@/lib/mp-db";
+import { isFormalVote } from "@/lib/mp-stats";
 import {
   calculateAge,
   formatAge,
   formatBirthDate,
   formatOkreg,
+  resolvePoselName,
+  toPoselProfil,
+  type PoselProfil,
 } from "@/lib/posel";
-import { fetchSejmMp, type SejmMpProfile } from "@/lib/sejm-mp";
-import { fetchInterpellationsList } from "@/lib/sejm-voting";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type PoselPageProps = {
   params: Promise<{ id: string }>;
 };
 
 export const dynamic = "force-dynamic";
+
+async function loadPosel(id: number): Promise<PoselProfil | null> {
+  const { data, error } = await supabaseAdmin.from("poslowie").select("*").eq("id", id).maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return toPoselProfil(data as Record<string, unknown>);
+}
 
 export async function generateMetadata({ params }: PoselPageProps) {
   const { id } = await params;
@@ -40,16 +52,20 @@ export async function generateMetadata({ params }: PoselPageProps) {
     return { title: "Nie znaleziono posła — SEJM ON" };
   }
 
-  const result = await fetchSejmMp(poselId);
+  try {
+    const posel = await loadPosel(poselId);
 
-  if (result.status !== "ok") {
+    if (!posel) {
+      return { title: "Nie znaleziono posła — SEJM ON" };
+    }
+
+    return {
+      title: `${posel.imie_nazwisko} — SEJM ON`,
+      description: `Profil posła ${posel.imie_nazwisko} (${getClubLabel(posel.partia)}), X kadencja Sejmu RP.`,
+    };
+  } catch {
     return { title: "Nie znaleziono posła — SEJM ON" };
   }
-
-  return {
-    title: `${result.mp.firstLastName} — SEJM ON`,
-    description: `Profil posła ${result.mp.firstLastName} (${getClubLabel(result.mp.club)}), X kadencja Sejmu RP.`,
-  };
 }
 
 function HeroMeta({
@@ -100,47 +116,49 @@ function AnalyticsSkeleton() {
   );
 }
 
-async function MpAnalytics({ mp }: { mp: SejmMpProfile }) {
-  const theme = getClubTheme(mp.club);
-  const [stats, interpellations, votes, sittingNumbers] = await Promise.all([
-    fetchMpProfileStats(mp.id),
-    fetchInterpellationsList(mp.id),
-    fetchMpVotesFromRecentSittings(mp.id),
-    fetchSittingNumbers().catch(() => [] as number[]),
-  ]);
-  // Drugi przesiew na wszelki wypadek: kworum, wnioski formalne, proceduralne.
-  const substantiveVotes = votes.filter((vote) => !isFormalVote(vote));
-  const sittings = [
-    ...new Set([
-      ...sittingNumbers,
-      ...substantiveVotes.map((vote) => vote.sitting).filter(Boolean),
-    ]),
-  ].sort((a, b) => b - a);
-  const interpellationCount =
-    mp.numberOfInterpellations ??
-    interpellations.total ??
-    stats.interpellationCount ??
-    (interpellations.hasMore ? null : interpellations.items.length);
+async function MpAnalytics({ posel }: { posel: PoselProfil }) {
+  const theme = getClubTheme(posel.partia);
 
-  return (
-    <MpProfileDashboard
-      poselId={mp.id}
-      interpellationCount={interpellationCount}
-      interpellationsApproximate={
-        mp.numberOfInterpellations == null &&
-        interpellations.total == null &&
-        stats.interpellationApproximate
-      }
-      attendancePercent={stats.attendancePercent}
-      clubTheme={theme}
-      votes={substantiveVotes}
-      sittings={sittings}
-      votesSimulated={false}
-      interpellations={interpellations.items}
-      interpellationsHasMore={interpellations.hasMore}
-      email={mp.email}
-    />
-  );
+  try {
+    const bundle = await fetchMpProfileBundleFromDb(posel.id, posel.partia);
+    const votes = (bundle?.stats.recentVotes ?? []).filter((vote) => !isFormalVote(vote));
+    const interpellations = bundle?.interpellations ?? [];
+    const sittings = [...new Set(votes.map((vote) => vote.sitting).filter(Boolean))].sort(
+      (a, b) => b - a,
+    );
+
+    return (
+      <MpProfileDashboard
+        poselId={posel.id}
+        interpellationCount={bundle?.stats.interpellationCount ?? null}
+        interpellationsApproximate={bundle?.stats.interpellationApproximate ?? false}
+        attendancePercent={bundle?.stats.attendancePercent ?? null}
+        clubTheme={theme}
+        votes={votes}
+        sittings={sittings}
+        votesSimulated={false}
+        interpellations={interpellations}
+        interpellationsHasMore={(bundle?.interpellationsTotal ?? 0) > interpellations.length}
+        email={null}
+      />
+    );
+  } catch {
+    return (
+      <MpProfileDashboard
+        poselId={posel.id}
+        interpellationCount={null}
+        interpellationsApproximate={false}
+        attendancePercent={null}
+        clubTheme={theme}
+        votes={[]}
+        sittings={[]}
+        votesSimulated={false}
+        interpellations={[]}
+        interpellationsHasMore={false}
+        email={null}
+      />
+    );
+  }
 }
 
 export default async function PoselPage({ params }: PoselPageProps) {
@@ -151,27 +169,32 @@ export default async function PoselPage({ params }: PoselPageProps) {
     notFound();
   }
 
-  const result = await fetchSejmMp(poselId);
+  let posel: PoselProfil | null;
 
-  if (result.status === "not_found") {
+  try {
+    posel = await loadPosel(poselId);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Nie udało się odczytać profilu z bazy.";
+
+    return <ProfileFetchError message={message} />;
+  }
+
+  if (!posel) {
     notFound();
   }
 
-  if (result.status === "error") {
-    return <ProfileFetchError message={result.message} />;
-  }
-
-  const mp = result.mp;
-  const theme = getClubTheme(mp.club);
-  const wiek = calculateAge(mp.birthDate);
-  const okreg = formatOkreg(mp.districtName, mp.districtNum);
-  const clubChip = mp.club?.trim() || getClubLabel(mp.club);
+  const theme = getClubTheme(posel.partia);
+  const { imie, nazwisko } = resolvePoselName(posel);
+  const wiek = calculateAge(posel.data_urodzenia);
+  const okreg = formatOkreg(posel.okreg_wyborczy, posel.okreg_numer);
+  const clubChip = posel.partia?.trim() || getClubLabel(posel.partia);
 
   const ageLine =
     wiek !== null
-      ? `${formatAge(wiek)}${mp.birthDate ? ` · ur. ${formatBirthDate(mp.birthDate)}` : ""}`
-      : mp.birthDate
-        ? `ur. ${formatBirthDate(mp.birthDate)}`
+      ? `${formatAge(wiek)}${posel.data_urodzenia ? ` · ur. ${formatBirthDate(posel.data_urodzenia)}` : ""}`
+      : posel.data_urodzenia
+        ? `ur. ${formatBirthDate(posel.data_urodzenia)}`
         : null;
 
   return (
@@ -187,33 +210,30 @@ export default async function PoselPage({ params }: PoselPageProps) {
         />
 
         <WatchMpButton
-          poselId={mp.id}
-          poselName={mp.firstLastName}
+          poselId={posel.id}
+          poselName={posel.imie_nazwisko}
           className="absolute right-4 top-4 z-10"
         />
 
         <div className="relative flex items-start gap-4 pr-28">
           <MpProfilePhoto
-            name={mp.firstLastName}
-            photoUrl={mp.photoUrl}
+            name={posel.imie_nazwisko}
+            photoUrl={posel.zdjecie_url}
             frameClassName={`border-4 ${theme.border}`}
           />
 
           <div className="min-w-0 pt-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
               Poseł X kadencji
-              {mp.active ? null : " · mandat wygasł"}
             </p>
             <h1 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl">
-              {mp.lastName ? (
+              {nazwisko ? (
                 <>
-                  <span className="block text-lg font-medium text-white/80">
-                    {mp.firstName}
-                  </span>
-                  {mp.lastName}
+                  <span className="block text-lg font-medium text-white/80">{imie}</span>
+                  {nazwisko}
                 </>
               ) : (
-                mp.firstLastName
+                posel.imie_nazwisko
               )}
             </h1>
 
@@ -235,17 +255,15 @@ export default async function PoselPage({ params }: PoselPageProps) {
 
         <div className="relative mt-5 flex flex-col gap-2 border-t border-white/10 pt-4">
           {ageLine ? <HeroMeta icon={Cake}>{ageLine}</HeroMeta> : null}
-          {mp.profession ? (
-            <HeroMeta icon={Briefcase}>{mp.profession}</HeroMeta>
-          ) : null}
-          {mp.educationLevel ? (
-            <HeroMeta icon={GraduationCap}>{mp.educationLevel}</HeroMeta>
+          {posel.zawod ? <HeroMeta icon={Briefcase}>{posel.zawod}</HeroMeta> : null}
+          {posel.wyksztalcenie ? (
+            <HeroMeta icon={GraduationCap}>{posel.wyksztalcenie}</HeroMeta>
           ) : null}
         </div>
       </section>
 
       <Suspense fallback={<AnalyticsSkeleton />}>
-        <MpAnalytics mp={mp} />
+        <MpAnalytics posel={posel} />
       </Suspense>
     </div>
   );

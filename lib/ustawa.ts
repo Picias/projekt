@@ -50,7 +50,7 @@ export const LEGISLATIVE_STAGES: { key: StageKey; label: string; hint: string }[
   { key: "sejm", label: "Sejm", hint: "Czytania i głosowanie" },
   { key: "senat", label: "Senat", hint: "Stanowisko Senatu" },
   { key: "prezydent", label: "Prezydent", hint: "Czeka na podpis" },
-  { key: "opublikowana", label: "Dz.U.", hint: "Ogłoszona w Dzienniku Ustaw" },
+  { key: "opublikowana", label: "Obowiązuje", hint: "Ogłoszona w Dzienniku Ustaw" },
 ];
 
 const STAGE_KEYS = LEGISLATIVE_STAGES.map((stage) => stage.key);

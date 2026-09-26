@@ -15,7 +15,7 @@ function json(body: unknown, status = 200) {
 }
 
 const USTAWA_COLUMNS =
-  "id, numer_druku, tytul_oficjalny, autor, data_wplywu, etap_legislacyjny";
+  "id, numer_druku, tytul_oficjalny, autor, data_wplywu, etap_legislacyjny, tagi";
 
 async function fetchWatchedUstawy(userId: string): Promise<Partial<Ustawa>[]> {
   const { data: watched, error } = await supabaseAdmin

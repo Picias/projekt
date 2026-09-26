@@ -18,9 +18,7 @@ export default function LegislativeProgress({ etap }: LegislativeProgressProps) 
       className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-white/70">
-          Postęp legislacyjny
-        </h3>
+        <h3 className="text-base font-bold text-white">Droga ustawy</h3>
         <span className="text-xs font-semibold text-emerald-300">
           {activeIndex + 1} z {LEGISLATIVE_STAGES.length}
         </span>
@@ -57,12 +55,12 @@ export default function LegislativeProgress({ etap }: LegislativeProgressProps) 
                   {isDone ? <Check size={14} strokeWidth={3} aria-hidden /> : index + 1}
                 </span>
                 <span
-                  className={`text-[11px] font-semibold leading-tight ${
+                  className={`text-xs font-semibold leading-tight ${
                     isActive
                       ? "text-emerald-300"
                       : isDone
-                        ? "text-white/70"
-                        : "text-white/35"
+                        ? "text-white/80"
+                        : "text-white/60"
                   }`}
                 >
                   {stage.label}

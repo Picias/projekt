@@ -6,7 +6,10 @@ import { Bell, Loader2 } from "lucide-react";
 
 import AppToast from "@/components/app-toast";
 import { loginHref } from "@/lib/profile";
-import type { SubscriptionTargetType } from "@/lib/subscriptions";
+import {
+  SUBSCRIPTIONS_CHANGED_EVENT,
+  type SubscriptionTargetType,
+} from "@/lib/subscriptions";
 import { useAuthUser } from "@/lib/use-auth-user";
 
 type SubscribeButtonProps = {
@@ -36,7 +39,10 @@ export default function SubscribeButton({
     null,
   );
   const onCountChangeRef = useRef(onCountChange);
-  onCountChangeRef.current = onCountChange;
+
+  useEffect(() => {
+    onCountChangeRef.current = onCountChange;
+  }, [onCountChange]);
 
   useEffect(() => {
     if (!toast) {
@@ -134,6 +140,7 @@ export default function SubscribeButton({
       };
       const nextSubscribed = Boolean(data.subscribed);
       setSubscribed(nextSubscribed);
+      window.dispatchEvent(new Event(SUBSCRIPTIONS_CHANGED_EVENT));
 
       if (typeof data.liczba_obserwujacych === "number") {
         onCountChangeRef.current?.(data.liczba_obserwujacych);
@@ -175,20 +182,20 @@ export default function SubscribeButton({
 
   const variantClass =
     variant === "icon"
-      ? `flex size-9 items-center justify-center rounded-full ${
+      ? `flex size-11 items-center justify-center rounded-full ${
           subscribed
             ? "bg-sejm-green text-white"
             : "bg-navy-900/80 text-white/70 ring-1 ring-white/15 hover:bg-white/15 hover:text-white"
         }`
       : variant === "full"
-        ? `flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${
+        ? `flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold ${
             subscribed
-              ? "bg-sejm-green text-white hover:bg-sejm-green/85"
-              : "bg-white/10 text-white ring-1 ring-emerald-400/30 hover:bg-white/15"
+              ? "bg-green-700 text-white hover:bg-green-800"
+              : "bg-white/10 text-white ring-1 ring-emerald-400/40 hover:bg-white/15"
           }`
-        : `inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+        : `inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold ${
             subscribed
-              ? "bg-sejm-green text-white"
+              ? "bg-green-700 text-white"
               : "bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/15"
           }`;
 

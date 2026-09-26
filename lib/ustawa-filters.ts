@@ -1,4 +1,11 @@
 import {
+  detectImpactAreas,
+  IMPACT_AREA_KEYS,
+  IMPACT_AREAS,
+  isImpactAreaKey,
+  type ImpactAreaKey,
+} from "@/lib/impact";
+import {
   getStageLabel,
   isEarlyLegislativeStage,
   isVetoStage,
@@ -21,6 +28,7 @@ export type UstawyFilters = {
   etap: string;
   autor: string;
   tag: string;
+  obszar: ImpactAreaKey | "";
   specjalne: UstawySpecialFilter;
   sort: UstawySortOrder;
   limit: number;
@@ -31,6 +39,7 @@ export const EMPTY_USTAWY_FILTERS: UstawyFilters = {
   etap: "",
   autor: "",
   tag: "",
+  obszar: "",
   specjalne: "",
   sort: "desc",
   limit: USTAWY_PAGE_SIZE,
@@ -38,10 +47,13 @@ export const EMPTY_USTAWY_FILTERS: UstawyFilters = {
 
 export type UstawyFilterOption = { value: string; label: string };
 
+export type UstawyAreaOption = { value: ImpactAreaKey; label: string; count: number };
+
 export type UstawyFilterOptions = {
   etapy: UstawyFilterOption[];
   autorzy: UstawyFilterOption[];
   tagi: UstawyFilterOption[];
+  obszary: UstawyAreaOption[];
 };
 
 export type UstawyFacetRow = {
@@ -69,6 +81,10 @@ function parseSpecialFilter(value: string): UstawySpecialFilter {
   return (USTAWY_SPECIAL_FILTERS as readonly string[]).includes(value)
     ? (value as Exclude<UstawySpecialFilter, "">)
     : "";
+}
+
+function parseObszar(value: string): ImpactAreaKey | "" {
+  return isImpactAreaKey(value) ? value : "";
 }
 
 function parseSortOrder(value: string): UstawySortOrder {
@@ -159,6 +175,7 @@ export function parseUstawyFilters(params: RawSearchParams): UstawyFilters {
     etap: firstValue(params.etap).slice(0, 120),
     autor: firstValue(params.autor).slice(0, 120),
     tag: firstValue(params.tag).slice(0, 80),
+    obszar: parseObszar(firstValue(params.obszar)),
     specjalne: parseSpecialFilter(firstValue(params.specjalne).slice(0, 40)),
     sort: parseSortOrder(firstValue(params.sort)),
     limit:
@@ -176,6 +193,7 @@ export function parseUstawySearchParams(params: {
     etap: params.get("etap") ?? undefined,
     autor: params.get("autor") ?? undefined,
     tag: params.get("tag") ?? undefined,
+    obszar: params.get("obszar") ?? undefined,
     specjalne: params.get("specjalne") ?? undefined,
     sort: params.get("sort") ?? undefined,
     limit: params.get("limit") ?? undefined,
@@ -206,6 +224,10 @@ export function buildUstawyQuery(filters: UstawyFilters): string {
     params.set("tag", filters.tag);
   }
 
+  if (filters.obszar) {
+    params.set("obszar", filters.obszar);
+  }
+
   if (filters.specjalne) {
     params.set("specjalne", filters.specjalne);
   }
@@ -222,6 +244,7 @@ export function buildUstawyQuery(filters: UstawyFilters): string {
   return query ? `?${query}` : "";
 }
 
+/** Filtry z panelu — bez obszaru, który ma własny, zawsze widoczny pasek. */
 export function countActiveUstawyFilters(filters: UstawyFilters): number {
   return [filters.etap, filters.autor, filters.tag, filters.specjalne].filter(Boolean).length;
 }
@@ -231,7 +254,7 @@ export function countUstawyFacetFilters(filters: UstawyFilters): number {
 }
 
 export function hasActiveUstawyFilters(filters: UstawyFilters): boolean {
-  return Boolean(filters.q) || countActiveUstawyFilters(filters) > 0;
+  return Boolean(filters.q) || Boolean(filters.obszar) || countActiveUstawyFilters(filters) > 0;
 }
 
 export function getUstawyEmptyCopy(filters: UstawyFilters): UstawyEmptyCopy {
@@ -301,12 +324,37 @@ function matchesSpecialFilter(row: UstawyFacetRow, filters: UstawyFilters): bool
   return true;
 }
 
+const rowAreasCache = new WeakMap<UstawyFacetRow, ImpactAreaKey[]>();
+
+function rowAreas(row: UstawyFacetRow): ImpactAreaKey[] {
+  let areas = rowAreasCache.get(row);
+
+  if (!areas) {
+    areas = detectImpactAreas(row, IMPACT_AREA_KEYS.length).map((area) => area.key);
+    rowAreasCache.set(row, areas);
+  }
+
+  return areas;
+}
+
+/**
+ * Obszar życia liczymy z tytułu w aplikacji (ta sama reguła co na kartach),
+ * więc do zapytania trafia gotowa lista numerów druków.
+ */
+export function printNumbersForArea(rows: UstawyFacetRow[], area: ImpactAreaKey): string[] {
+  return rows.filter((row) => rowAreas(row).includes(area)).map((row) => row.numer_druku);
+}
+
 function matchesFacetFilters(
   row: UstawyFacetRow,
   filters: UstawyFilters,
-  skip?: "etap" | "autor" | "tag",
+  skip?: "etap" | "autor" | "tag" | "obszar",
 ): boolean {
   if (!matchesSpecialFilter(row, filters)) {
+    return false;
+  }
+
+  if (skip !== "obszar" && filters.obszar && !rowAreas(row).includes(filters.obszar)) {
     return false;
   }
 
@@ -354,10 +402,17 @@ export function collectUstawyFilterOptions(
   const etapy = new Set<string>();
   const autorzy = new Set<string>();
   const tagi = new Set<string>();
+  const obszary = new Map<ImpactAreaKey, number>();
 
   for (const row of rows) {
     if (!matchesSearch(row, filters.q)) {
       continue;
+    }
+
+    if (matchesFacetFilters(row, filters, "obszar")) {
+      for (const area of rowAreas(row)) {
+        obszary.set(area, (obszary.get(area) ?? 0) + 1);
+      }
     }
 
     if (matchesFacetFilters(row, filters, "etap") && row.etap_legislacyjny) {
@@ -395,6 +450,11 @@ export function collectUstawyFilterOptions(
       filters.tag,
       (a, b) => a.localeCompare(b, "pl"),
       (value) => value,
+    ),
+    // Kolejność stała (jak w IMPACT_AREA_KEYS), żeby pasek nie skakał po
+    // każdej zmianie filtra; aktywny obszar zostaje nawet przy zerze wyników.
+    obszary: IMPACT_AREA_KEYS.filter((key) => obszary.has(key) || key === filters.obszar).map(
+      (key) => ({ value: key, label: IMPACT_AREAS[key].label, count: obszary.get(key) ?? 0 }),
     ),
   };
 }

@@ -7,7 +7,6 @@ import {
   ChevronRight,
   FileX,
   Mail,
-  MicOff,
   Minus,
   Play,
   SearchX,
@@ -376,7 +375,7 @@ function SpeechesPanel({
     );
   }
 
-  if (loading || items === null) {
+  if (loading && items === null) {
     return (
       <div className="flex flex-col gap-2" aria-busy="true" aria-label="Ładowanie wystąpień">
         {[1, 2, 3, 4].map((item) => (
@@ -386,19 +385,19 @@ function SpeechesPanel({
     );
   }
 
-  if (items.length === 0) {
+  const list = items ?? [];
+
+  if (list.length === 0) {
     return (
-      <EmptyState
-        icon={MicOff}
-        title="Brak wystąpień"
-        description="Poseł nie przemawiał jeszcze z trybuny sejmowej w tej kadencji."
-      />
+      <p className="text-white/60 text-sm py-4 text-center">
+        Brak ostatnich wystąpień w systemie.
+      </p>
     );
   }
 
   return (
     <ul className="flex max-h-96 flex-col gap-2 overflow-y-auto">
-      {items.map((speech) => {
+      {list.map((speech) => {
         const dateText = speech.date
           ? formatVoteDate(speech.date)
           : speech.dateLabel ?? "—";

@@ -3,6 +3,9 @@ import type { Ustawa } from "@/lib/ustawa";
 
 export const SUBSCRIPTION_TARGET_TYPES = ["posel", "ustawa"] as const;
 
+/** Zdarzenie okna, po którym sekcje „Obserwuję” ponownie pobierają listy. */
+export const SUBSCRIPTIONS_CHANGED_EVENT = "sejmon:subscriptions-changed";
+
 export type SubscriptionTargetType = (typeof SUBSCRIPTION_TARGET_TYPES)[number];
 
 export type WatchedUstawaItem = Pick<

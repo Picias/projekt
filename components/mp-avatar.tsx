@@ -28,7 +28,7 @@ export default function MpAvatar({
       {photoUrl ? (
         <img
           src={photoUrl}
-          alt={name}
+          alt=""
           className="size-full object-cover object-top"
         />
       ) : (

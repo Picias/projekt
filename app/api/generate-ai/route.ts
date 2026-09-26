@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const summary = await generateAiSummaryFromSejm(numerDruku);
+    const { summary, tagi } = await generateAiSummaryFromSejm(numerDruku);
 
     const { error: updateError } = await supabaseAdmin
       .from("ustawy")
@@ -65,6 +65,12 @@ export async function POST(request: Request) {
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    // Tagi obszarów to dodatek do wskaźnika wpływu — ich nieudany zapis nie
+    // może unieważnić gotowego streszczenia, więc błąd pomijamy.
+    if (tagi.length > 0) {
+      await supabaseAdmin.from("ustawy").update({ tagi }).eq("numer_druku", numerDruku);
     }
 
     revalidatePath(`/ustawy/${ustawa.id}`);

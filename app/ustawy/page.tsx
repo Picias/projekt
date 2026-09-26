@@ -16,6 +16,7 @@ import {
   freezerCutoffIsoDate,
   getUstawyEmptyCopy,
   parseUstawyFilters,
+  printNumbersForArea,
   USTAWY_FREEZER_STAGE_FILTER,
   USTAWY_FREEZER_TITLE_EXCLUDES,
   USTAWY_FREEZER_TITLE_FILTER,
@@ -31,7 +32,7 @@ export const dynamic = "force-dynamic";
 
 type UstawaListItem = Pick<
   Ustawa,
-  "id" | "numer_druku" | "tytul_oficjalny" | "autor" | "data_wplywu" | "etap_legislacyjny"
+  "id" | "numer_druku" | "tytul_oficjalny" | "autor" | "data_wplywu" | "etap_legislacyjny" | "tagi"
 >;
 
 type UstawyPageProps = {
@@ -49,13 +50,22 @@ function escapeForFilter(value: string): string {
 
 async function fetchUstawy(
   filters: Filters,
+  areaPrintNumbers: string[] | null,
 ): Promise<{ ustawy: UstawaListItem[]; total: number }> {
+  if (areaPrintNumbers && areaPrintNumbers.length === 0) {
+    return { ustawy: [], total: 0 };
+  }
+
   let query = supabaseAdmin
     .from("ustawy")
     .select(
-      "id, numer_druku, tytul_oficjalny, autor, data_wplywu, etap_legislacyjny",
+      "id, numer_druku, tytul_oficjalny, autor, data_wplywu, etap_legislacyjny, tagi",
       { count: "exact" },
     );
+
+  if (areaPrintNumbers) {
+    query = query.in("numer_druku", areaPrintNumbers);
+  }
 
   const phrase = escapeForFilter(filters.q);
 
@@ -152,7 +162,7 @@ function UstawyEmptyResults({ filters }: { filters: Filters }) {
       <div className="flex justify-center pb-6">
         <Link
           href="/ustawy"
-          className="rounded-xl bg-sejm-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-sejm-green-light"
+          className="flex min-h-11 items-center rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-800"
         >
           Wyczyść wszystko
         </Link>
@@ -163,23 +173,35 @@ function UstawyEmptyResults({ filters }: { filters: Filters }) {
 
 export default async function UstawyPage({ searchParams }: UstawyPageProps) {
   const filters = parseUstawyFilters(await searchParams);
-  const [{ ustawy, total }, facetRows] = await Promise.all([
-    fetchUstawy(filters),
-    fetchUstawyFacets(),
-  ]);
+
+  // Obszar życia wymaga listy numerów z facetów, więc tylko wtedy zapytania
+  // idą po kolei — bez niego oba lecą równolegle.
+  let facetRows: UstawyFacetRow[];
+  let result: { ustawy: UstawaListItem[]; total: number };
+
+  if (filters.obszar) {
+    facetRows = await fetchUstawyFacets();
+    result = await fetchUstawy(filters, printNumbersForArea(facetRows, filters.obszar));
+  } else {
+    [result, facetRows] = await Promise.all([fetchUstawy(filters, null), fetchUstawyFacets()]);
+  }
+
+  const { ustawy, total } = result;
   const filterOptions = collectUstawyFilterOptions(facetRows, filters);
 
-  const isBrowsing = Boolean(filters.q) || countActiveUstawyFilters(filters) > 0;
+  const isBrowsing =
+    Boolean(filters.q) || Boolean(filters.obszar) || countActiveUstawyFilters(filters) > 0;
   const hasMore = ustawy.length < total;
 
   return (
-    <div className="flex flex-col gap-6 px-5 py-5">
+    <div className="flex w-full max-w-full flex-col gap-6 overflow-x-hidden px-5 py-5">
       <BackButton />
 
       <header>
-        <h1 className="text-3xl font-bold leading-tight">Śledzone ustawy</h1>
-        <p className="mt-2 text-sm leading-relaxed text-white/60">
-          Projekty ustaw wyjaśnione prostym językiem — bez prawniczego żargonu.
+        <h1 className="text-3xl font-bold leading-tight">Ustawy</h1>
+        <p className="mt-2 text-base leading-relaxed text-white/80">
+          Nowe prawo wyjaśnione po ludzku. Wybierz temat, który Cię dotyczy, i sprawdź, co
+          się zmieni.
         </p>
       </header>
 
@@ -201,7 +223,7 @@ export default async function UstawyPage({ searchParams }: UstawyPageProps) {
                 ? "Najstarsze druki"
                 : "Najnowsze druki"}
           </h2>
-          <span className="ml-auto text-xs text-white/45" aria-live="polite">
+          <span className="ml-auto text-sm text-white/75" aria-live="polite">
             {formatUstawyCount(total)}
           </span>
         </div>
@@ -234,7 +256,7 @@ export default async function UstawyPage({ searchParams }: UstawyPageProps) {
                   limit: filters.limit + USTAWY_PAGE_SIZE,
                 })}`}
                 scroll={false}
-                className="rounded-2xl border border-white/10 bg-white/5 py-3 text-center text-sm font-semibold text-white/75 transition-colors hover:border-white/25 hover:text-white"
+                className="flex min-h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/5 py-3 text-center text-base font-semibold text-white transition-colors hover:border-white/35 hover:bg-white/10"
               >
                 Pokaż więcej ({total - ustawy.length})
               </Link>

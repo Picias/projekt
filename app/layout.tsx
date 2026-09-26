@@ -29,12 +29,12 @@ export const metadata: Metadata = {
   },
 };
 
+// Bez blokady powiększania: WCAG 1.4.4 wymaga, by tekst dało się
+// powiększyć do 200% — osoby słabowidzące robią to gestem na telefonie.
 export const viewport: Viewport = {
   themeColor: "#0B132B",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -44,8 +44,13 @@ export default function RootLayout({
   return (
     <html lang="pl" className={inter.variable}>
       <body className="bg-navy-950 font-sans text-white antialiased">
+        <a href="#tresc" className="skip-link">
+          Przejdź do treści
+        </a>
         <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col bg-navy-900 md:shadow-[0_0_80px_rgba(0,0,0,0.55)]">
-          <main className="flex-1 pb-28">{children}</main>
+          <main id="tresc" tabIndex={-1} className="flex-1 pb-28 outline-none">
+            {children}
+          </main>
           <BottomNav />
         </div>
       </body>

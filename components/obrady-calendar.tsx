@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
-import ObradyTextCard, { ObradyTekstWiersze } from "@/components/obrady-text-card";
+import { extractKeyEvents } from "@/components/obrady-text-card";
 
 type SittingDay = {
   date: string;
@@ -34,14 +34,6 @@ const monthTitleFormatter = new Intl.DateTimeFormat("pl-PL", {
   year: "numeric",
 });
 
-function sittingLabel(number: number, heading: string): string {
-  if (number > 0) {
-    return `${number}. posiedzenie Sejmu`;
-  }
-
-  return heading.split(/\s+w dni(?:ach|u)\s/)[0].trim() || "Posiedzenie Sejmu";
-}
-
 function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
@@ -71,16 +63,12 @@ export default function ObradyCalendar({
   sittingDays,
   today,
   initialDate,
-  initialTitle,
-  initialSitting,
   initialAgendaTekst,
 }: ObradyCalendarProps) {
   const [year, month] = initialDate.split("-").map(Number);
   const [cursor, setCursor] = useState({ year, month: month - 1 });
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [agendaTekst, setAgendaTekst] = useState(initialAgendaTekst);
-  const [sitting, setSitting] = useState(initialSitting);
-  const [title, setTitle] = useState(initialTitle);
   const [loading, setLoading] = useState(false);
   const agendaRequest = useRef<AbortController | null>(null);
 
@@ -112,8 +100,6 @@ export default function ObradyCalendar({
 
     if (date === initialDate) {
       setAgendaTekst(initialAgendaTekst);
-      setSitting(initialSitting);
-      setTitle(initialTitle);
       setLoading(false);
       return;
     }
@@ -121,8 +107,6 @@ export default function ObradyCalendar({
     const controller = new AbortController();
     agendaRequest.current = controller;
     setLoading(true);
-    setTitle(marker.title);
-    setSitting(marker.number);
 
     fetch(`/api/obrady/agenda?date=${date}`, {
       cache: "no-store",
@@ -133,8 +117,6 @@ export default function ObradyCalendar({
 
         if (!controller.signal.aborted) {
           setAgendaTekst(payload.agendaTekst ?? null);
-          setSitting(payload.sitting ?? marker.number);
-          setTitle(payload.title ?? marker.title);
         }
       })
       .catch((error: unknown) => {
@@ -153,6 +135,7 @@ export default function ObradyCalendar({
 
   const cells = monthCells(cursor.year, cursor.month);
   const selectedSitting = sittingByDate.get(selectedDate);
+  const keyEvents = !loading && agendaTekst ? extractKeyEvents(agendaTekst) : [];
 
   return (
     <section className="flex flex-col gap-6">
@@ -237,36 +220,61 @@ export default function ObradyCalendar({
         </div>
       </div>
 
-      <ObradyTextCard title="Porządek obrad">
-        {selectedSitting ? (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-base font-semibold leading-snug text-white">
-              {sittingLabel(
-                sitting ?? selectedSitting.number,
-                title ?? selectedSitting.title,
-              )}
-            </h3>
-            <p className="text-xs text-slate-400">{selectedDate}</p>
-
+      {selectedSitting ? (
+        <>
+          <section className="rounded-2xl bg-navy-900 p-5 ring-1 ring-white/10">
+            <h2 className="text-base font-semibold text-white">
+              🔥 Najważniejsze na tym posiedzeniu
+            </h2>
             {loading ? (
-              <p className="mt-2 flex items-center gap-2 text-sm text-slate-300">
+              <p className="mt-4 flex items-center gap-2 text-sm text-white/60">
+                <Loader2 size={16} className="animate-spin" aria-hidden />
+                Wczytuję porządek obrad…
+              </p>
+            ) : keyEvents.length > 0 ? (
+              <ul className="mt-4 space-y-4">
+                {keyEvents.map((event, index) => (
+                  <li
+                    key={`${index}-${event.slice(0, 48)}`}
+                    className="relative pl-5 text-sm leading-relaxed text-white/80 before:absolute before:left-0 before:top-2 before:h-2 before:w-2 before:rounded-full before:bg-sejm-green before:content-['']"
+                  >
+                    {event}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-white/50 text-sm mt-4">
+                Brak kluczowych głosowań lub gorących tematów w obecnym harmonogramie.
+              </p>
+            )}
+          </section>
+
+          <section className="rounded-2xl bg-navy-900 p-5 ring-1 ring-white/10">
+            <h2 className="text-base font-semibold text-white">
+              Pełny, urzędowy porządek obrad
+            </h2>
+            {loading ? (
+              <p className="mt-4 flex items-center gap-2 text-sm text-white/60">
                 <Loader2 size={16} className="animate-spin" aria-hidden />
                 Wczytuję porządek obrad…
               </p>
             ) : agendaTekst ? (
-              <ObradyTekstWiersze tekst={agendaTekst} />
+              <div
+                className="text-white/70 text-sm leading-relaxed mt-4 [&>div]:mb-2"
+                dangerouslySetInnerHTML={{ __html: agendaTekst }}
+              />
             ) : (
-              <p className="mt-1 text-sm leading-relaxed text-slate-300">
+              <p className="mt-4 text-sm leading-relaxed text-white/60">
                 Brak opublikowanego porządku obrad dla tego dnia.
               </p>
             )}
-          </div>
-        ) : (
-          <p className="text-sm leading-relaxed text-slate-300">
-            Tego dnia Sejm nie obraduje. Szmaragdowe dni to posiedzenia Sejmu.
-          </p>
-        )}
-      </ObradyTextCard>
+          </section>
+        </>
+      ) : (
+        <p className="text-sm leading-relaxed text-slate-300">
+          Tego dnia Sejm nie obraduje. Szmaragdowe dni to posiedzenia Sejmu.
+        </p>
+      )}
     </section>
   );
 }

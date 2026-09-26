@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import {
   ArrowRightLeft,
@@ -13,9 +14,12 @@ import {
 import BackButton from "@/components/back-button";
 import GenerateAiSummary from "@/components/generate-ai-summary";
 import GlosObywateli from "@/components/glos-obywateli";
+import ImpactMeter from "@/components/impact-meter";
 import LegislativeProgress from "@/components/legislative-progress";
+import LegislativeTitle from "@/components/legislative-title";
 import UstawaWatchedVotes from "@/components/ustawa-watched-votes";
 import WatchUstawaButton from "@/components/watch-ustawa-button";
+import { plainTitle } from "@/lib/legislative-title";
 import {
   formatUstawaDate,
   getStageLabel,
@@ -24,7 +28,6 @@ import {
   shortenTitle,
 } from "@/lib/ustawa";
 import { fetchUstawaByParam } from "@/lib/ustawa-db";
-import { detectDziedzina } from "@/lib/ustawa-human-summary";
 
 type UstawaPageProps = {
   params: Promise<{ id: string }>;
@@ -39,9 +42,69 @@ export async function generateMetadata({ params }: UstawaPageProps) {
   }
 
   return {
-    title: `Druk nr ${ustawa.numer_druku} — SEJM ON`,
-    description: ustawa.opis_ludzki ?? shortenTitle(ustawa.tytul_oficjalny, 150),
+    title: `${shortenTitle(plainTitle(ustawa.tytul_oficjalny), 70)} (druk nr ${ustawa.numer_druku}) — SEJM ON`,
+    description: stripBold(
+      ustawa.ai_w_skrocie ?? ustawa.opis_ludzki ?? shortenTitle(ustawa.tytul_oficjalny, 150),
+    ),
   };
+}
+
+const BULLET_LINE = /^(?:•|–|-|\*)\s+/;
+const NUMBERED_LINE = /^\d+[.)]\s+/;
+
+function stripBold(text: string): string {
+  return text.replace(/\*\*/g, "");
+}
+
+/** **fraza** z odpowiedzi modelu → <strong>, bez wstawiania surowego HTML. */
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    const isBold = part.startsWith("**") && part.endsWith("**") && part.length > 4;
+
+    if (!isBold) {
+      return part;
+    }
+
+    return (
+      <strong key={`${keyPrefix}-${index}`} className="font-semibold text-white">
+        {part.slice(2, -2)}
+      </strong>
+    );
+  });
+}
+
+function SummaryBody({ content }: { content: string }) {
+  const items: string[] = [];
+  const paragraphs: string[] = [];
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      continue;
+    }
+
+    if (BULLET_LINE.test(trimmed) || NUMBERED_LINE.test(trimmed)) {
+      items.push(trimmed.replace(BULLET_LINE, "").replace(NUMBERED_LINE, ""));
+    } else {
+      paragraphs.push(trimmed);
+    }
+  }
+
+  return (
+    <div className="mt-4 flex flex-col gap-3 text-base leading-relaxed text-white/80">
+      {paragraphs.map((paragraph, index) => (
+        <p key={`p-${index}`}>{renderInline(paragraph, `p-${index}`)}</p>
+      ))}
+      {items.length > 0 ? (
+        <ul className="list-disc space-y-4 pl-5">
+          {items.map((item, index) => (
+            <li key={`li-${index}`}>{renderInline(item, `li-${index}`)}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function UnderstandCard({
@@ -54,20 +117,18 @@ function UnderstandCard({
   content: string | null;
 }) {
   return (
-    <article className="rounded-2xl border border-emerald-400/15 bg-linear-to-br from-navy-800 via-navy-800 to-emerald-500/10 p-5 shadow-lg ring-1 ring-emerald-400/10">
+    <article className="rounded-2xl border border-emerald-400/20 bg-linear-to-br from-navy-800 via-navy-800 to-emerald-500/10 p-5 shadow-lg">
       <div className="flex items-center gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
           <Icon size={20} strokeWidth={1.9} aria-hidden />
         </span>
-        <h3 className="text-base font-bold leading-tight">{label}</h3>
+        <h3 className="text-lg font-bold leading-tight">{label}</h3>
       </div>
 
       {content ? (
-        <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-white/75">
-          {content}
-        </p>
+        <SummaryBody content={content} />
       ) : (
-        <p className="mt-4 text-sm leading-relaxed text-white/45">
+        <p className="mt-4 text-sm leading-relaxed text-white/70">
           Ta sekcja nie została jeszcze opracowana dla tego druku.
         </p>
       )}
@@ -78,10 +139,8 @@ function UnderstandCard({
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-white/10 py-3 last:border-b-0">
-      <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-white/45">
-        {label}
-      </dt>
-      <dd className="text-right text-sm font-medium text-white/85">{value}</dd>
+      <dt className="shrink-0 text-sm font-semibold text-white/70">{label}</dt>
+      <dd className="text-right text-sm font-medium text-white">{value}</dd>
     </div>
   );
 }
@@ -94,7 +153,6 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
     notFound();
   }
 
-  const dziedzina = detectDziedzina(ustawa.tytul_oficjalny);
   const aiReady = hasAiSummary(ustawa);
 
   return (
@@ -103,26 +161,41 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
 
       <header>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-300 ring-1 ring-emerald-400/25">
+          <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-sm font-bold text-emerald-200 ring-1 ring-emerald-400/30">
             Druk nr {ustawa.numer_druku}
           </span>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/70">
-            {getStageLabel(ustawa.etap_legislacyjny)}
-          </span>
-          <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-white/50">
-            {dziedzina}
+          <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-white">
+            Etap: {getStageLabel(ustawa.etap_legislacyjny)}
           </span>
         </div>
 
-        <h1 className="mt-4 text-xl sm:text-2xl font-bold text-white break-words leading-snug">
-          {ustawa.tytul_oficjalny}
-        </h1>
+        <div className="mt-4">
+          <LegislativeTitle
+            title={ustawa.tytul_oficjalny}
+            as="h1"
+            scale="hero"
+            showOfficial
+          />
+        </div>
+
+        <p className="mt-2 text-sm text-white/75">
+          Zgłosił: {ustawa.autor ?? "wnioskodawca nieokreślony"} ·{" "}
+          {formatUstawaDate(ustawa.data_wplywu)}
+        </p>
       </header>
+
+      <ImpactMeter ustawa={ustawa} />
+
+      <WatchUstawaButton
+        ustawaId={ustawa.id}
+        numerDruku={ustawa.numer_druku}
+        liczbaObserwujacych={ustawa.liczba_obserwujacych ?? 0}
+      />
 
       <section aria-labelledby="zrozum-ustawe">
         <div className="mb-4 flex items-center gap-2">
-          <Sparkles size={18} className="text-emerald-300" aria-hidden />
-          <h2 id="zrozum-ustawe" className="text-lg font-semibold">
+          <Sparkles size={20} className="text-emerald-300" aria-hidden />
+          <h2 id="zrozum-ustawe" className="text-lg font-bold">
             Zrozum ustawę
           </h2>
         </div>
@@ -154,36 +227,31 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
           <GenerateAiSummary numerDruku={ustawa.numer_druku} />
         )}
 
-        <p className="mt-3 text-xs leading-relaxed text-white/35">
-          Podsumowania powstają automatycznie i mają charakter pomocniczy. Wiążąca jest
-          wyłącznie treść druku sejmowego.
+        <p className="mt-3 text-sm leading-relaxed text-white/70">
+          Podsumowania i wskaźnik wpływu powstają automatycznie i mają charakter pomocniczy.
+          Wiążąca jest wyłącznie treść druku sejmowego.
         </p>
       </section>
+
+      <GlosObywateli printNum={ustawa.numer_druku} />
 
       <UstawaWatchedVotes
         ustawaId={ustawa.id}
         hasVoting={hasReachedVoting(ustawa.etap_legislacyjny)}
       />
 
-      <GlosObywateli printNum={ustawa.numer_druku} />
-
       <section aria-labelledby="metryka" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-          <FileText size={18} className="text-emerald-300" aria-hidden />
-          <h2 id="metryka" className="text-lg font-semibold">
+          <FileText size={20} className="text-emerald-300" aria-hidden />
+          <h2 id="metryka" className="text-lg font-bold">
             Metryka i postęp
           </h2>
         </div>
 
-        <article className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-white/45">
-            Tytuł oficjalny
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-white/85">
-            {ustawa.tytul_oficjalny}
-          </p>
+        <LegislativeProgress etap={ustawa.etap_legislacyjny} />
 
-          <dl className="mt-4">
+        <article className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/15">
+          <dl>
             <MetaRow label="Numer druku" value={ustawa.numer_druku} />
             <MetaRow label="Autor" value={ustawa.autor ?? "Nieokreślony"} />
             <MetaRow label="Data wpływu" value={formatUstawaDate(ustawa.data_wplywu)} />
@@ -205,7 +273,7 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
               <span className="block text-sm font-bold text-white">
                 Czytaj oryginał (PDF)
               </span>
-              <span className="block text-xs text-white/50">
+              <span className="block text-sm text-white/75">
                 Pełna treść druku nr {ustawa.numer_druku} z serwera Sejmu
               </span>
             </span>
@@ -216,29 +284,21 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
               <FileDown size={20} strokeWidth={1.9} aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold text-white/60">
+              <span className="block text-sm font-bold text-white/80">
                 Czytaj oryginał (PDF)
               </span>
-              <span className="block text-xs text-white/40">
+              <span className="block text-sm text-white/70">
                 API Sejmu nie udostępnia skanu tego druku.
               </span>
             </span>
           </div>
         )}
 
-        <LegislativeProgress etap={ustawa.etap_legislacyjny} />
-
-        <WatchUstawaButton
-          ustawaId={ustawa.id}
-          numerDruku={ustawa.numer_druku}
-          liczbaObserwujacych={ustawa.liczba_obserwujacych ?? 0}
-        />
-
         <a
           href={`https://api.sejm.gov.pl/sejm/term10/prints/${encodeURIComponent(ustawa.numer_druku)}`}
           target="_blank"
           rel="noreferrer"
-          className="text-center text-xs font-medium text-emerald-300/80 hover:text-emerald-300 hover:underline"
+          className="flex min-h-11 items-center justify-center text-center text-sm font-medium text-emerald-300 hover:underline"
         >
           Zobacz dane źródłowe druku w API Sejmu
         </a>

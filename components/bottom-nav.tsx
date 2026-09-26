@@ -33,7 +33,7 @@ export default function BottomNav() {
   }
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50">
+    <nav aria-label="Główna nawigacja" className="fixed inset-x-0 bottom-0 z-50">
       <div className="mx-auto w-full max-w-md border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
         <ul className="grid grid-cols-5">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
@@ -45,10 +45,10 @@ export default function BottomNav() {
                 <Link
                   href={href}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
+                  className={`flex min-h-14 flex-col items-center justify-center gap-1 py-2 text-xs transition-colors ${
                     isActive
-                      ? "text-sejm-green"
-                      : "text-navy-900/45 hover:text-navy-900/70"
+                      ? "font-bold text-green-700"
+                      : "font-medium text-slate-600 hover:text-navy-900"
                   }`}
                 >
                   <Icon
