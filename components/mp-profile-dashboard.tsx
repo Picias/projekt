@@ -60,7 +60,7 @@ export default function MpProfileDashboard({
       setSpeechesError(null);
 
       try {
-        const response = await fetch(`/api/scrape-speeches?id=${poselId}`, {
+        const response = await fetch(`/api/wystapienia?id=${poselId}`, {
           cache: "no-store",
         });
         const data = (await response.json()) as ScrapedSpeech[] | { error?: string };

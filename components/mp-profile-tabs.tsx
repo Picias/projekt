@@ -412,7 +412,12 @@ function SpeechesPanel({
         return (
           <li key={speech.path}>
             <Link
-              href={speechWatchHref(speech.path, `/poslowie/${poselId}`)}
+              href={speechWatchHref(
+                speech.path,
+                `/poslowie/${poselId}`,
+                speech.videoPath,
+                speech.streamUrl,
+              )}
               className="block rounded-2xl border border-white/10 bg-navy-800/70 p-4 transition-colors hover:border-white/20 hover:bg-white/8"
             >
               <div className="flex items-start gap-3">

@@ -461,6 +461,41 @@ function speechesListUrl(mpId: string, variant: "mp" | "generic"): string {
   return `${SEJM_SITE_BASE}/wypowiedzi.xsp?id=${encodeURIComponent(mpId)}&type=A`;
 }
 
+/** Dopina działający adres nagrania do pierwszych wypowiedzi z wideo. Pusta lista zostaje pusta. */
+export async function withPlayableStreams(
+  speeches: ScrapedSpeech[],
+  limit = 3,
+): Promise<ScrapedSpeech[]> {
+  const next = speeches.map((speech) => ({ ...speech }));
+  let attached = 0;
+  let attempts = 0;
+
+  for (const speech of next) {
+    if (attached >= limit || attempts >= limit + 2) {
+      break;
+    }
+
+    if (!speech.videoPath || speech.streamUrl) {
+      continue;
+    }
+
+    attempts += 1;
+
+    try {
+      const details = await scrapeSpeechDetails(speech.path);
+
+      if (details.streamUrl) {
+        speech.streamUrl = details.streamUrl;
+        attached += 1;
+      }
+    } catch {
+      // Ta wypowiedź otworzy się linkiem do Sejmu. Reszta listy zostaje.
+    }
+  }
+
+  return next;
+}
+
 export async function scrapeMpSpeeches(id: number): Promise<ScrapedSpeech[]> {
   const mpId = formatMpApiId(id);
   const session: SejmHtmlSession = { cookies: new Map() };
