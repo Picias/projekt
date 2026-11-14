@@ -140,6 +140,11 @@ async function MpAnalytics({ posel }: { posel: PoselProfil }) {
         interpellations={interpellations}
         interpellationsHasMore={(bundle?.interpellationsTotal ?? 0) > interpellations.length}
         email={null}
+        share={{
+          name: posel.imie_nazwisko,
+          photoUrl: posel.zdjecie_url,
+          club: posel.partia,
+        }}
       />
     );
   } catch {
@@ -156,6 +161,11 @@ async function MpAnalytics({ posel }: { posel: PoselProfil }) {
         interpellations={[]}
         interpellationsHasMore={false}
         email={null}
+        share={{
+          name: posel.imie_nazwisko,
+          photoUrl: posel.zdjecie_url,
+          club: posel.partia,
+        }}
       />
     );
   }

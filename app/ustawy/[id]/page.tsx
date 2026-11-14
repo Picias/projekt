@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import BackButton from "@/components/back-button";
+import { ShareButton } from "@/components/ShareCardGenerator";
 import GenerateAiSummary from "@/components/generate-ai-summary";
 import GlosObywateli from "@/components/glos-obywateli";
 import ImpactMeter from "@/components/impact-meter";
@@ -19,6 +20,7 @@ import LegislativeProgress from "@/components/legislative-progress";
 import LegislativeTitle from "@/components/legislative-title";
 import UstawaWatchedVotes from "@/components/ustawa-watched-votes";
 import WatchUstawaButton from "@/components/watch-ustawa-button";
+import { detectImpactAreas, getWalletImpact } from "@/lib/impact";
 import { plainTitle } from "@/lib/legislative-title";
 import {
   formatUstawaDate,
@@ -154,6 +156,9 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
   }
 
   const aiReady = hasAiSummary(ustawa);
+  const impactAreas = detectImpactAreas(ustawa);
+  const wallet = getWalletImpact(impactAreas);
+  const impactLabel = impactAreas[0]?.label ?? "Sprawy państwowe";
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
@@ -185,6 +190,19 @@ export default async function UstawaPage({ params }: UstawaPageProps) {
       </header>
 
       <ImpactMeter ustawa={ustawa} />
+
+      <ShareButton
+        className="w-full"
+        card={{
+          type: "ustawa",
+          title: shortenTitle(plainTitle(ustawa.tytul_oficjalny), 120),
+          impactLabel,
+          tags: [...impactAreas.map((area) => area.label), ...(ustawa.tagi ?? [])],
+          summary: ustawa.ai_w_skrocie ?? ustawa.opis_ludzki,
+          walletLabel: wallet.label,
+          walletLevel: wallet.level,
+        }}
+      />
 
       <WatchUstawaButton
         ustawaId={ustawa.id}

@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import MpActivityTiles from "@/components/mp-activity-tiles";
+import MpActivityTiles, {
+  ATTENDANCE_PLACEHOLDER,
+  CLUB_LOYALTY_PLACEHOLDER,
+} from "@/components/mp-activity-tiles";
+import { ShareButton } from "@/components/ShareCardGenerator";
 import MpProfileTabs, {
   type MpProfileTabId,
 } from "@/components/mp-profile-tabs";
 import type { ClubTheme } from "@/lib/club-colors";
-import type { MpVote } from "@/lib/mp-stats";
+import { formatVoteLabel, type MpVote } from "@/lib/mp-stats";
 import type { ScrapedSpeech } from "@/lib/sejm-speech-types";
 import type { InterpellationItem } from "@/lib/sejm-voting";
 
@@ -22,6 +26,11 @@ type MpProfileDashboardProps = {
   interpellations: InterpellationItem[];
   interpellationsHasMore: boolean;
   email: string | null;
+  share?: {
+    name: string;
+    photoUrl: string | null;
+    club: string | null;
+  };
 };
 
 export default function MpProfileDashboard({
@@ -36,6 +45,7 @@ export default function MpProfileDashboard({
   interpellations,
   interpellationsHasMore,
   email,
+  share,
 }: MpProfileDashboardProps) {
   const [tab, setTab] = useState<MpProfileTabId>("votes");
   const [speeches, setSpeeches] = useState<ScrapedSpeech[] | null>(null);
@@ -88,9 +98,28 @@ export default function MpProfileDashboard({
   }
 
   const speechesLoading = speeches === null && speechesError === null;
+  const latestVote = votes[0];
 
   return (
     <div className="flex flex-col gap-6">
+      {share ? (
+        <ShareButton
+          className="w-full"
+          card={{
+            type: "posel",
+            name: share.name,
+            photoUrl: share.photoUrl,
+            club: share.club,
+            attendancePercent: attendancePercent ?? ATTENDANCE_PLACEHOLDER,
+            attendanceEstimated: attendancePercent === null,
+            loyaltyPercent: CLUB_LOYALTY_PLACEHOLDER,
+            mpId: poselId,
+            votingSitting: latestVote?.sitting ?? null,
+            votingDate: latestVote?.date ?? null,
+            voteLabel: latestVote ? formatVoteLabel(latestVote.vote) : null,
+          }}
+        />
+      ) : null}
       <MpActivityTiles
         speeches={speeches === null ? null : speeches.length}
         speechesLoading={speechesLoading}
