@@ -39,3 +39,6 @@ Supabase_pass.txt
 
 # typescript
 *.tsbuildinfo
+
+# postęp jednorazowego zasilenia głosowań — da się wznowić skrypt po przerwaniu
+scripts/.backfill-votings-progress.json

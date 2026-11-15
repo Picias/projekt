@@ -221,6 +221,11 @@ function VotesPanel({
 }) {
   const [filtrPosiedzenia, setFiltrPosiedzenia] = useState("");
   const [filtrGlosu, setFiltrGlosu] = useState<GlosFilter>("");
+  const [visibleCount, setVisibleCount] = useState(80);
+
+  useEffect(() => {
+    setVisibleCount(80);
+  }, [filtrPosiedzenia, filtrGlosu]);
 
   const sittings = useMemo(() => {
     const fromVotes = votes.map((vote) => vote.sitting).filter(Boolean);
@@ -240,6 +245,11 @@ function VotesPanel({
       return true;
     });
   }, [votes, filtrPosiedzenia, filtrGlosu]);
+
+  const visibleVotes = filtrPosiedzenia
+    ? filteredVotes
+    : filteredVotes.slice(0, visibleCount);
+  const hiddenVotes = filteredVotes.length - visibleVotes.length;
 
   if (votes.length === 0) {
     return (
@@ -297,7 +307,7 @@ function VotesPanel({
         />
       ) : (
         <ul className="flex flex-col gap-2">
-          {filteredVotes.map((vote) => {
+          {visibleVotes.map((vote) => {
             const content = (
               <div className="flex items-start gap-3">
                 <VoteIcon vote={vote.vote} />
@@ -351,6 +361,15 @@ function VotesPanel({
           })}
         </ul>
       )}
+      {hiddenVotes > 0 ? (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + 80)}
+          className="rounded-xl border border-white/10 bg-navy-800/70 px-4 py-3 text-sm font-semibold text-white/80 transition-colors hover:bg-white/8"
+        >
+          Pokaż wcześniejsze głosowania ({hiddenVotes})
+        </button>
+      ) : null}
     </div>
   );
 }

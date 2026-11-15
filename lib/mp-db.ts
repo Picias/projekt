@@ -9,6 +9,7 @@ import {
 import type { InterpellationItem, VotingDeepDive } from "@/lib/sejm-voting";
 
 const INTERPELLATIONS_LIMIT = 20;
+const GLOSOWANIA_PAGE_SIZE = 1000;
 
 type PoselFrekwencjaRow = {
   frekwencja_procent: number | null;
@@ -156,6 +157,31 @@ export async function fetchAttendanceComparisonFromDb(
   };
 }
 
+async function fetchPoselGlosowania(mpId: number): Promise<PoselGlosowanieRow[]> {
+  const rows: PoselGlosowanieRow[] = [];
+
+  for (let from = 0; ; from += GLOSOWANIA_PAGE_SIZE) {
+    const { data, error } = await supabaseAdmin
+      .from("posel_glosowania")
+      .select("*")
+      .eq("posel_id", mpId)
+      .order("sitting", { ascending: false })
+      .order("numer_glosowania", { ascending: false })
+      .range(from, from + GLOSOWANIA_PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const page = (data ?? []) as PoselGlosowanieRow[];
+    rows.push(...page);
+
+    if (page.length < GLOSOWANIA_PAGE_SIZE) {
+      return rows;
+    }
+  }
+}
+
 export async function fetchMpProfileBundleFromDb(
   mpId: number,
   clubName: string | null,
@@ -168,11 +194,7 @@ export async function fetchMpProfileBundleFromDb(
     comparison,
   ] = await Promise.all([
     supabaseAdmin.from("posel_frekwencja").select("*").eq("posel_id", mpId).maybeSingle(),
-    supabaseAdmin
-      .from("posel_glosowania")
-      .select("*")
-      .eq("posel_id", mpId)
-      .order("sitting", { ascending: false }),
+    fetchPoselGlosowania(mpId),
     supabaseAdmin
       .from("interpelacje")
       .select("*")
@@ -187,7 +209,7 @@ export async function fetchMpProfileBundleFromDb(
   ]);
 
   const frekwencja = frekwencjaResponse.data as PoselFrekwencjaRow | null;
-  const glosowania = (glosowaniaResponse.data ?? []) as PoselGlosowanieRow[];
+  const glosowania = glosowaniaResponse;
   const interpelacje = (interpelacjeResponse.data ?? []) as InterpelacjaRow[];
   const interpellationsTotal = interpelacjeCountResponse.count ?? interpelacje.length;
 
